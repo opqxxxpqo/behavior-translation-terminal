@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>乐团指挥 · 桌面录制</title>
+<style>
+  :root {
+    --bg: #050505;
+    --panel: rgba(12, 13, 14, 0.97);
+    --line: rgba(116, 135, 144, 0.42);
+    --soft: rgba(116, 135, 144, 0.16);
+    --text: #d7dee1;
+    --dim: #768186;
+    --hot: #f1f6f7;
+    --cyan: #84d7ef;
+    --warn: #c79054;
+    --ok: #9fd4b2;
+  }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+  body {
+    color: var(--text);
+    background:
+      linear-gradient(var(--soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--soft) 1px, transparent 1px),
+      radial-gradient(circle at 50% -18%, rgba(180, 190, 196, 0.10), transparent 35%),
+      linear-gradient(180deg, #090a0b 0%, #020202 100%);
+    background-size: 82px 82px, 82px 82px, auto, auto;
+    font-family: "Cascadia Mono", "Microsoft YaHei UI", "Microsoft YaHei", "Consolas", "Courier New", monospace;
+    font-size: 13px;
+    text-shadow: 0 0 7px rgba(190, 210, 218, 0.42);
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    background:
+      repeating-linear-gradient(to bottom, rgba(255,255,255,0.042) 0 1px, transparent 1px 4px),
+      linear-gradient(90deg, rgba(255,255,255,0.014), rgba(120,170,190,0.018));
+    mix-blend-mode: screen;
+    opacity: 0.28;
+  }
+  .shell {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  header {
+    position: relative;
+    border: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(16, 18, 19, 0.96), rgba(5, 6, 7, 0.98));
+    box-shadow: inset 0 0 30px rgba(255,255,255,0.025), 0 0 24px rgba(120, 150, 160, 0.10);
+    padding: 12px 132px 12px 14px;
+  }
+  h1 {
+    margin: 0 0 10px;
+    color: var(--hot);
+    font-size: 15px;
+    text-transform: uppercase;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-top: 8px; }
+  .status-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--dim);
+  }
+  .chip {
+    border: 1px solid rgba(125, 142, 149, 0.32);
+    background: rgba(12, 14, 15, 0.96);
+    padding: 5px 10px;
+    min-width: 118px;
+  }
+  .chip strong { color: var(--hot); font-weight: 900; }
+  button, select {
+    height: 31px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: rgba(17, 20, 22, 0.95);
+    color: var(--text);
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 12px;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+    box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.035), 0 0 10px rgba(120, 150, 160, 0.08);
+  }
+  button { cursor: pointer; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: rgba(42, 48, 51, 0.95); color: #fff; }
+  button.primary { border-color: rgba(170, 190, 196, 0.58); }
+  button.danger { border-color: #9f6650; color: #f0c1b1; }
+  button.icon {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    font-size: 15px;
+    font-weight: 900;
+  }
+  select {
+    min-width: min(420px, 56vw);
+    color: var(--dim);
+  }
+  #langToggle {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    min-width: 104px;
+    color: var(--hot);
+  }
+  .light {
+    width: 10px;
+    height: 10px;
+    background: #263034;
+    border: 1px solid rgba(200, 220, 228, 0.18);
+    box-shadow: 0 0 8px rgba(160, 180, 188, 0.12);
+  }
+  .light.recording { background: var(--ok); box-shadow: 0 0 14px rgba(159, 212, 178, 0.72); }
+  .light.paused { background: var(--warn); box-shadow: 0 0 14px rgba(199, 144, 84, 0.65); }
+  .message { color: var(--cyan); }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--line);
+    background: #050505;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <button id="langToggle" type="button">[ 中文 ]</button>
+    <h1 data-i18n="title">CONDUCTOR CAPTURE TERMINAL</h1>
+    <div class="status-line">
+      <span class="light" id="recLight"></span>
+      <span class="chip"><span data-i18n="state">STATE</span> <strong id="stateText">IDLE</strong></span>
+      <span class="chip"><span data-i18n="elapsed">ELAPSED</span> <strong id="elapsedText">00:00:00</strong></span>
+      <span class="chip"><span data-i18n="size">SIZE</span> <strong id="sizeText">0 B</strong></span>
+      <span class="message" id="message">SYS/REC > STANDBY</span>
+    </div>
+    <div class="row">
+      <button id="startBtn" class="primary" type="button" data-i18n="record">[ REC ]</button>
+      <button id="pauseBtn" class="icon" type="button" disabled title="Pause">❚❚</button>
+      <button id="stopBtn" class="icon danger" type="button" disabled title="Stop">■</button>
+      <button id="minBtn" type="button" disabled data-i18n="tray">[ TRAY ]</button>
+      <button id="folderBtn" type="button" data-i18n="folder">[ FOLDER ]</button>
+    </div>
+    <div class="row">
+      <select id="sessionSelect"></select>
+      <button id="loadBtn" type="button" data-i18n="load">[ LOAD ]</button>
+      <button id="refreshBtn" type="button" data-i18n="refresh">[ REFRESH ]</button>
+    </div>
+  </header>
+  <iframe id="playbackFrame" src="renderer.html?desktop=1"></iframe>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const TEXT = {
+  en: {
+    title: "CONDUCTOR CAPTURE TERMINAL",
+    state: "STATE",
+    elapsed: "ELAPSED",
+    size: "SIZE",
+    record: "[ REC ]",
+    tray: "[ TRAY ]",
+    folder: "[ FOLDER ]",
+    load: "[ LOAD ]",
+    refresh: "[ REFRESH ]",
+    select: "-- SELECT SESSION --",
+    standby: "SYS/REC > STANDBY",
+    apiMissing: "SYS/REC > DESKTOP API NOT READY",
+    started: "SYS/REC > CAPTURE BUS ACTIVE",
+    paused: "SYS/REC > CAPTURE HOLD",
+    resumed: "SYS/REC > CAPTURE RESUMED",
+    saved: "SYS/REC > ARCHIVED",
+    loaded: "SYS/REC > ARCHIVE LOADED",
+    namePrompt: "Session label (blank = timestamp)",
+    pause: "Pause",
+    resume: "Resume",
+    stop: "Stop",
+  },
+  zh: {
+    title: "指挥录制终端",
+    state: "状态",
+    elapsed: "时长",
+    size: "大小",
+    record: "[ 录制 ]",
+    tray: "[ 托盘 ]",
+    folder: "[ 文件夹 ]",
+    load: "[ 载入 ]",
+    refresh: "[ 刷新 ]",
+    select: "-- 选择记录 --",
+    standby: "SYS/REC > 待机",
+    apiMissing: "SYS/REC > 桌面接口未就绪",
+    started: "SYS/REC > 记录通道已启动",
+    paused: "SYS/REC > 记录暂停",
+    resumed: "SYS/REC > 继续记录",
+    saved: "SYS/REC > 已归档",
+    loaded: "SYS/REC > 已载入记录",
+    namePrompt: "给这段记录取名（留空=时间戳）",
+    pause: "暂停",
+    resume: "继续",
+    stop: "停止",
+  },
+};
+let lang = localStorage.getItem("kdsDesktopLang") || "en";
+let lastMessageKey = "standby";
+let polling = null;
+
+function t(key) {
+  return (TEXT[lang] && TEXT[lang][key]) || TEXT.en[key] || key;
+}
+
+function api() {
+  return window.pywebview && window.pywebview.api ? window.pywebview.api : null;
+}
+
+function fmtElapsed(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtSize(b) {
+  b = b || 0;
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function setMessage(key, extra = "") {
+  lastMessageKey = key;
+  $("message").textContent = `${t(key)}${extra ? ": " + extra : ""}`;
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  $("langToggle").textContent = lang === "zh" ? "[ EN ]" : "[ 中文 ]";
+  $("pauseBtn").title = $("pauseBtn").textContent === "▶" ? t("resume") : t("pause");
+  $("pauseBtn").setAttribute("aria-label", $("pauseBtn").title);
+  $("stopBtn").title = t("stop");
+  $("stopBtn").setAttribute("aria-label", t("stop"));
+  const first = $("sessionSelect").options[0];
+  if (first) first.textContent = t("select");
+  setMessage(lastMessageKey);
+  sendLanguageToPlayback();
+}
+
+function setState(s) {
+  const state = s && s.state ? s.state : "idle";
+  $("stateText").textContent = state.toUpperCase();
+  $("elapsedText").textContent = fmtElapsed(s && s.elapsed);
+  $("sizeText").textContent = fmtSize(s && s.size);
+  $("recLight").className = `light ${state === "recording" ? "recording" : state === "paused" ? "paused" : ""}`;
+  $("startBtn").disabled = state !== "idle";
+  $("pauseBtn").disabled = state === "idle";
+  $("stopBtn").disabled = state === "idle";
+  $("minBtn").disabled = state === "idle";
+  $("pauseBtn").textContent = state === "paused" ? "▶" : "❚❚";
+  $("pauseBtn").title = state === "paused" ? t("resume") : t("pause");
+  $("pauseBtn").setAttribute("aria-label", $("pauseBtn").title);
+}
+
+async function refreshSessions() {
+  const a = api();
+  const sel = $("sessionSelect");
+  sel.innerHTML = `<option value="">${t("select")}</option>`;
+  if (!a || !a.list_sessions) return;
+  const list = await a.list_sessions();
+  for (const item of list || []) {
+    const opt = document.createElement("option");
+    opt.value = item.path;
+    const dt = new Date(item.mtime * 1000).toLocaleString();
+    opt.textContent = `${item.name} · ${fmtSize(item.size)} · ${dt}`;
+    sel.appendChild(opt);
+  }
+}
+
+function sendToPlayback(text, label) {
+  const frame = $("playbackFrame");
+  if (!frame || !frame.contentWindow) return;
+  try {
+    if (typeof frame.contentWindow.loadSessionText === "function") {
+      frame.contentWindow.loadSessionText(text, label);
+      return;
+    }
+  } catch (e) {}
+  frame.contentWindow.postMessage({ type: "loadSessionText", text, label }, "*");
+}
+
+function sendLanguageToPlayback() {
+  const frame = $("playbackFrame");
+  if (!frame || !frame.contentWindow) return;
+  frame.contentWindow.postMessage({ type: "setLanguage", lang }, "*");
+}
+
+async function loadSession(path, label) {
+  const a = api();
+  if (!a || !path) return;
+  const text = await a.read_session(path);
+  if (!text) return;
+  sendToPlayback(text, label || path.split(/[\\/]/).pop());
+  setMessage("loaded", label || "");
+}
+
+async function pollStatus() {
+  const a = api();
+  if (!a || !a.get_recording_status) {
+    setMessage("apiMissing");
+    return;
+  }
+  try {
+    setState(await a.get_recording_status());
+  } catch (e) {}
+}
+
+$("langToggle").addEventListener("click", () => {
+  lang = lang === "zh" ? "en" : "zh";
+  localStorage.setItem("kdsDesktopLang", lang);
+  applyLang();
+});
+$("playbackFrame").addEventListener("load", sendLanguageToPlayback);
+
+$("startBtn").addEventListener("click", async () => {
+  const a = api();
+  if (!a) return setMessage("apiMissing");
+  const r = await a.start_recording();
+  if (r && r.ok) {
+    await pollStatus();
+    setMessage("started");
+  }
+});
+
+$("pauseBtn").addEventListener("click", async () => {
+  const a = api();
+  if (!a) return setMessage("apiMissing");
+  const r = await a.pause_recording();
+  await pollStatus();
+  setMessage(r && r.state === "paused" ? "paused" : "resumed");
+});
+
+$("stopBtn").addEventListener("click", async () => {
+  const a = api();
+  if (!a) return setMessage("apiMissing");
+  const name = window.prompt(t("namePrompt"), "");
+  const r = await a.stop_recording(name || null);
+  await pollStatus();
+  await refreshSessions();
+  if (r && r.ok && r.path) {
+    setMessage("saved", r.name || "");
+    await loadSession(r.path, r.name || "");
+  }
+});
+
+$("minBtn").addEventListener("click", async () => {
+  const a = api();
+  if (a && a.minimize_window) {
+    const r = await a.minimize_window();
+    if (r && r.ok === false) setMessage("apiMissing");
+  }
+});
+
+$("folderBtn").addEventListener("click", async () => {
+  const a = api();
+  if (a && a.open_log_folder) await a.open_log_folder();
+});
+
+$("loadBtn").addEventListener("click", () => {
+  const sel = $("sessionSelect");
+  if (sel.value) loadSession(sel.value, sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
+});
+$("refreshBtn").addEventListener("click", refreshSessions);
+$("sessionSelect").addEventListener("change", () => {
+  const sel = $("sessionSelect");
+  if (sel.value) loadSession(sel.value, sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
+});
+
+window.addEventListener("pywebviewready", async () => {
+  await refreshSessions();
+  await pollStatus();
+  if (polling) clearInterval(polling);
+  polling = setInterval(pollStatus, 500);
+  setMessage("standby");
+});
+
+applyLang();
+setState({ state: "idle" });
+setTimeout(() => {
+  if (!api()) setMessage("apiMissing");
+}, 1200);
+</script>
+</body>
+</html>

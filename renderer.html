@@ -4,123 +4,191 @@
 <meta charset="UTF-8">
 <title>乐团指挥 · 回看 v3</title>
 <style>
+  :root {
+    --crt-bg: #050505;
+    --crt-panel: rgba(12, 13, 14, 0.96);
+    --crt-panel-2: rgba(7, 8, 9, 0.98);
+    --crt-line: rgba(116, 135, 144, 0.42);
+    --crt-line-soft: rgba(116, 135, 144, 0.16);
+    --crt-text: #d7dee1;
+    --crt-dim: #768186;
+    --crt-hot: #f1f6f7;
+    --crt-cyan: #84d7ef;
+    --crt-warn: #c79054;
+    --crt-green: #9fd4b2;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #0a0a0f; color: #d0d0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; }
-  header { padding: 12px 16px; background: #14141c; border-bottom: 1px solid #2a2a3a; }
-  h1 { margin: 0 0 10px 0; font-size: 16px; font-weight: 500; letter-spacing: 0.5px; }
-  h1 .v { font-size: 11px; color: #5fc0ff; margin-left: 6px; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 50% -18%, rgba(180, 190, 196, 0.10), transparent 35%),
+      linear-gradient(180deg, #090a0b 0%, #020202 100%),
+      var(--crt-bg);
+    color: var(--crt-text);
+    font-family: "Cascadia Mono", "Microsoft YaHei UI", "Microsoft YaHei", "Consolas", "Courier New", ui-monospace, monospace;
+    font-size: 13px;
+    text-shadow: 0 0 7px rgba(190, 210, 218, 0.45);
+    letter-spacing: 0;
+    animation: crtFlicker 6.5s infinite steps(42);
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(to bottom, rgba(255,255,255,0.045) 0 1px, transparent 1px 4px),
+      repeating-linear-gradient(90deg, transparent 0 57px, rgba(190,205,212,0.024) 57px 58px),
+      linear-gradient(90deg, rgba(255,255,255,0.014), rgba(120,170,190,0.022));
+    mix-blend-mode: screen;
+    opacity: 0.34;
+    z-index: 200;
+    animation: signalShift 9s infinite steps(12);
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 96px rgba(0, 0, 0, 0.9);
+    z-index: 201;
+  }
+  @keyframes signalShift {
+    0%, 100% { transform: translateX(0); opacity: 0.38; }
+    31% { transform: translateX(0); opacity: 0.44; }
+    32% { transform: translateX(1px); opacity: 0.58; }
+    33% { transform: translateX(-1px); opacity: 0.36; }
+    68% { transform: translateX(0); opacity: 0.42; }
+    69% { transform: translateX(2px); opacity: 0.5; }
+    70% { transform: translateX(0); opacity: 0.4; }
+  }
+  @keyframes crtFlicker {
+    0%, 100% { filter: brightness(1) contrast(1.02); }
+    8% { filter: brightness(0.96) contrast(1.08); }
+    9% { filter: brightness(1.08) contrast(1.12); }
+    41% { filter: brightness(0.98) contrast(1.04); }
+    42% { filter: brightness(1.05) contrast(1.1); }
+    76% { filter: brightness(0.94) contrast(1.08); }
+  }
+  .app-shell {
+    height: 100vh;
+    padding: 16px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px;
+    background:
+      linear-gradient(var(--crt-line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--crt-line-soft) 1px, transparent 1px);
+    background-size: 82px 82px;
+  }
+  header {
+    position: relative;
+    padding: 14px 160px 14px 16px;
+    background: linear-gradient(180deg, rgba(16, 18, 19, 0.96), rgba(5, 6, 7, 0.98));
+    border: 1px solid var(--crt-line);
+    box-shadow: inset 0 0 30px rgba(255,255,255,0.025), 0 0 24px rgba(120, 150, 160, 0.10);
+  }
+  header h2 { margin: 0 0 12px 0; font-size: 15px; font-weight: 900; color: var(--crt-hot); text-transform: uppercase; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
-  button, input[type=file]::file-selector-button, select, input[type=number] {
-    background: #2a2a3a; color: #d0d0e0; border: 1px solid #3a3a4a;
-    padding: 6px 12px; border-radius: 4px; font-size: 13px; font-family: inherit;
+  button, select, input[type=number] {
+    background: rgba(17, 20, 22, 0.95); color: var(--crt-text); border: 1px solid var(--crt-line);
+    padding: 6px 12px; border-radius: 0; font-size: 12px; font-family: inherit;
+    box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.035), 0 0 10px rgba(120, 150, 160, 0.08);
+    text-transform: uppercase;
+    clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
   }
   button { cursor: pointer; }
   button:disabled { opacity: 0.35; cursor: not-allowed; }
-  button:hover:not(:disabled) { background: #3a3a4a; }
-  button.primary { background: #1e4a7a; border-color: #2e6fb8; }
-  button.primary:hover:not(:disabled) { background: #2e6fb8; }
-  input[type=file] { color: #8080a0; font-size: 12px; }
-  input[type=number] { width: 70px; padding: 4px 6px; }
-  select { padding: 6px 10px; min-width: 200px; }
-  label { color: #a0a0b8; }
-  #progressContainer { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-  #progressBar { flex: 1; height: 8px; background: #2a2a3a; border-radius: 4px; cursor: pointer; position: relative; overflow: hidden; }
-  #progressBar.disabled { cursor: not-allowed; opacity: 0.4; }
-  #progressFill { height: 100%; background: linear-gradient(90deg, #5fc0ff, #b58eff); width: 0%; transition: width 0.05s linear; }
-  #timeDisplay { color: #a0a0b8; font-family: ui-monospace, monospace; font-size: 12px; min-width: 120px; text-align: right; }
-  main { padding: 16px; }
-  canvas.visual { display: block; width: 100%; background: #14141c; border: 1px solid #2a2a3a; border-radius: 6px; }
-  #waveform { height: 108px; margin-bottom: 10px; }
-  #keysTimeline { height: 72px; margin-bottom: 10px; }
-  #trail { height: 42vh; }
-  #info { margin-top: 12px; font-size: 12px; color: #8080a0; line-height: 1.8; }
-  .chip { display: inline-block; padding: 2px 8px; background: #2a2a3a; border-radius: 3px; margin-right: 6px; color: #d0d0e0; }
-  .status { color: #5fc0ff; margin-left: 4px; }
-  .hint { color: #707088; font-size: 11px; margin-left: 4px; }
-
-  /* Recording panel */
-  #recPanel { padding: 14px 16px; background: #11111a; border-bottom: 1px solid #2a2a3a; }
-  #recPanel h2 { margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase; }
-  .rec-row { display: flex; align-items: center; gap: 12px; }
-  .light { width: 10px; height: 10px; border-radius: 50%; background: #555; flex-shrink: 0; }
-  .light.recording { background: #4ade80; box-shadow: 0 0 8px #4ade80; animation: pulse 1.6s ease-in-out infinite; }
-  .light.paused { background: #facc15; box-shadow: 0 0 6px #facc15; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  #recStatus { font-family: ui-monospace, monospace; color: #d0d0e0; font-size: 13px; min-width: 280px; }
-  .grow { flex: 1; }
-  button.danger { background: #6a1f1f; border-color: #a02525; }
-  button.danger:hover:not(:disabled) { background: #a02525; }
-
-  /* Modal */
-  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; align-items: center; justify-content: center; }
-  .modal.hidden { display: none; }
-  .modal-card { background: #14141c; border: 1px solid #2a2a3a; border-radius: 8px; padding: 24px; min-width: 380px; }
-  .modal-card h3 { margin: 0 0 14px 0; font-size: 15px; font-weight: 500; }
-  .modal-card .desc { color: #a0a0b8; font-size: 12px; margin: 0 0 14px 0; line-height: 1.6; }
-  .modal-card input[type=text] {
-    width: 100%; padding: 8px 10px; background: #0a0a0f; color: #d0d0e0;
-    border: 1px solid #3a3a4a; border-radius: 4px; font-size: 14px; font-family: inherit;
-    margin-bottom: 14px;
+  button:hover:not(:disabled) { background: rgba(42, 48, 51, 0.95); color: #ffffff; box-shadow: inset 0 0 20px rgba(200,215,220,0.10), 0 0 16px rgba(165,185,190,0.12); }
+  button.primary { background: rgba(22, 29, 32, 0.96); border-color: rgba(170, 190, 196, 0.58); }
+  button.primary:hover:not(:disabled) { background: rgba(43, 53, 57, 0.98); }
+  button.icon-btn {
+    width: 44px;
+    min-width: 44px;
+    height: 31px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0;
   }
-  .modal-card .actions { display: flex; gap: 10px; justify-content: flex-end; }
-
-  section.playback h2 { margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase; }
+  #playBtn { font-size: 16px; }
+  #pauseBtn { font-size: 14px; }
+  #stopBtn { font-size: 13px; }
+  input[type=file] { display: none; }
+  input[type=number] { width: 104px; padding: 6px 8px; }
+  select { padding: 6px 10px; min-width: 200px; }
+  label { color: var(--crt-dim); }
+  .file-name { color: var(--crt-dim); min-width: 160px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #langToggle {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    min-width: 104px;
+    color: var(--crt-hot);
+  }
+  #progressContainer { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  #progressBar { flex: 1; height: 10px; background: #0d0f10; border: 1px solid var(--crt-line); border-radius: 0; cursor: pointer; position: relative; overflow: hidden; box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.035); }
+  #progressBar.disabled { cursor: not-allowed; opacity: 0.4; }
+  #progressFill { height: 100%; background: linear-gradient(90deg, #a5b1b6, #dce6e8); width: 0%; transition: width 0.05s linear; box-shadow: 0 0 18px rgba(210, 225, 230, 0.55); }
+  #timeDisplay { color: var(--crt-text); font-family: inherit; font-size: 12px; min-width: 120px; text-align: right; }
+  .visual-stack {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 23% 16% minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  canvas.visual { display: block; width: 100%; height: 100%; background: var(--crt-panel-2); border: 1px solid var(--crt-line); border-radius: 0; box-shadow: inset 0 0 34px rgba(255,255,255,0.035), 0 0 22px rgba(110, 130, 136, 0.10); filter: blur(0.12px) saturate(0.86); }
+  #waveform, #keysTimeline, #trail { margin: 0; }
+  #info { display: flex; flex-wrap: wrap; gap: 8px; min-height: 29px; font-size: 12px; color: var(--crt-dim); }
+  .chip { display: inline-block; padding: 5px 10px; background: rgba(12, 14, 15, 0.96); border: 1px solid rgba(125, 142, 149, 0.32); border-radius: 0; color: var(--crt-text); }
+  .status { color: var(--crt-cyan); margin-left: 4px; }
+  button.danger { background: rgba(96, 26, 22, 0.95); border-color: #ff8a66; }
+  button.danger:hover:not(:disabled) { background: rgba(146, 44, 34, 0.95); }
+  @media (max-width: 760px) {
+    .app-shell { padding: 10px; }
+    header { padding-right: 132px; }
+    .visual-stack { grid-template-rows: 22% 16% minmax(0, 1fr) auto; }
+  }
 </style>
 </head>
 <body>
-<section id="recPanel">
-  <h2>录制</h2>
-  <div class="rec-row">
-    <span class="light" id="recLight"></span>
-    <span id="recStatus">未录制</span>
-    <span class="grow"></span>
-    <button id="recStart" class="primary">● 开始</button>
-    <button id="recPause" disabled>❚❚ 暂停</button>
-    <button id="recStop" class="danger" disabled>■ 停止</button>
-    <button id="recBackground" disabled>后台运行</button>
-  </div>
-</section>
-
-<header>
-  <h2 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase;">回看</h2>
-  <div class="row">
-    <input type="file" id="fileInput" accept=".jsonl,.json">
-    <select id="sessionSelect" style="display:none"></select>
-    <button id="demoBtn">生成测试数据</button>
-  </div>
-  <div class="row">
-    <label>目标时长 <input type="number" id="targetDur" value="180" min="10" step="10"> 秒</label>
-    <button id="renderBtn" disabled>生成 WAV 缓冲</button>
-    <button id="playBtn" disabled>▶ 播放</button>
-    <button id="pauseBtn" disabled>❚❚ 暂停</button>
-    <button id="stopBtn" disabled>■ 停止</button>
-    <button id="downloadBtn" disabled>↓ 下载 WAV</button>
-    <span id="status" class="status"></span>
-  </div>
-  <div id="progressContainer">
-    <div id="progressBar" class="disabled"><div id="progressFill"></div></div>
-    <span id="timeDisplay">00:00 / 00:00</span>
-  </div>
-</header>
-
-<div id="stopModal" class="modal hidden">
-  <div class="modal-card">
-    <h3>保存录制</h3>
-    <p class="desc">给这段录制取个名字方便以后回看；留空则用时间戳保存。</p>
-    <input type="text" id="stopName" placeholder="例如：周二上午写代码" autocomplete="off">
-    <div class="actions">
-      <button id="stopCancel">取消</button>
-      <button id="stopSave" class="primary">保存</button>
+<div class="app-shell">
+  <header>
+    <button id="langToggle" type="button">[ 中文 ]</button>
+    <h2 data-i18n="analysisTitle">ANALYSIS BAY / RESPONSE PLAYBACK</h2>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".jsonl,.json">
+      <button id="loadBtn" type="button" data-i18n="loadFile">[ LOAD FILE ]</button>
+      <select id="sessionSelect" style="display:none"></select>
+      <span id="fileName" class="file-name" data-i18n="noFile">NO FILE</span>
+      <button id="demoBtn" type="button" data-i18n="simData">[ SIM DATA ]</button>
     </div>
-  </div>
+    <div class="row">
+      <label><span data-i18n="runLength">RUN LENGTH</span> <input type="number" id="targetDur" value="180" min="10" step="10"> <span data-i18n="seconds">SEC</span></label>
+      <button id="renderBtn" type="button" disabled data-i18n="buffer">[ BUFFER ]</button>
+      <button id="playBtn" class="icon-btn" type="button" disabled data-i18n="playIcon" data-label-key="playLabel">▶</button>
+      <button id="pauseBtn" class="icon-btn" type="button" disabled data-i18n="pauseIcon" data-label-key="pauseLabel">❚❚</button>
+      <button id="stopBtn" class="icon-btn" type="button" disabled data-i18n="stopIcon" data-label-key="stopLabel">■</button>
+      <button id="downloadBtn" type="button" disabled data-i18n="dumpWav">[ DUMP WAV ]</button>
+      <span id="status" class="status"></span>
+    </div>
+    <div id="progressContainer">
+      <div id="progressBar" class="disabled"><div id="progressFill"></div></div>
+      <span id="timeDisplay">00:00 / 00:00</span>
+    </div>
+  </header>
+
+  <main class="visual-stack">
+    <canvas id="waveform" class="visual"></canvas>
+    <canvas id="keysTimeline" class="visual"></canvas>
+    <canvas id="trail" class="visual"></canvas>
+    <div id="info">NO SESSION LOADED / LOAD JSONL OR EXECUTE SIM DATA</div>
+  </main>
 </div>
-<main>
-  <canvas id="waveform" class="visual"></canvas>
-  <canvas id="keysTimeline" class="visual"></canvas>
-  <canvas id="trail" class="visual"></canvas>
-  <div id="info">加载 .jsonl 或点"生成测试数据"，再点"播放"。</div>
-</main>
-<script async src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
 <script>
 // ---------- Seeded RNG ----------
 function hashStr(s) {
@@ -275,6 +343,24 @@ function parseJsonl(text) {
   return out;
 }
 
+function loadSessionText(text, label) {
+  ingest(parseJsonl(text));
+  setFileName(label || "ARCHIVE");
+  setStatus("ARCHIVE LOADED: " + (label || sessionId || "SESSION"));
+}
+
+window.loadSessionText = loadSessionText;
+window.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "loadSessionText" && typeof data.text === "string") {
+    loadSessionText(data.text, data.label || "");
+    return;
+  }
+  if (data.type === "setLanguage" && typeof data.lang === "string") {
+    setLanguage(data.lang, !isEmbeddedDesktop);
+  }
+});
+
 function ingest(rawEvents) {
   resetPlayback();
   renderedBuffer = null;
@@ -318,6 +404,132 @@ const $ = (id) => document.getElementById(id);
 const canvas = $("trail");
 const waveCanvas = $("waveform");
 const keysCanvas = $("keysTimeline");
+const UI_TEXT = {
+  en: {
+    analysisTitle: "ANALYSIS BAY / RESPONSE PLAYBACK",
+    loadFile: "[ LOAD FILE ]",
+    noFile: "NO FILE",
+    simData: "[ SIM DATA ]",
+    runLength: "RUN LENGTH",
+    seconds: "SEC",
+    buffer: "[ BUFFER ]",
+    playIcon: "▶",
+    pauseIcon: "❚❚",
+    stopIcon: "■",
+    playLabel: "Play",
+    pauseLabel: "Pause",
+    stopLabel: "Stop",
+    dumpWav: "[ DUMP WAV ]",
+    statusPrefix: "SYS/84A >",
+    sessionOption: "-- SELECT SESSION --",
+    noSession: "NO SESSION LOADED / LOAD JSONL OR EXECUTE SIM DATA",
+    behaviorTitle: "BEHAVIOR DENSITY TIMELINE",
+    sessionSuffix: "SESSION",
+    keyboardInput: "+ keyboard input",
+    mouseMovement: "+ mouse movement",
+    specialEvents: "* special events",
+    noteField: "KEYBOARD NOTE FIELD",
+    low: "LOW",
+    mid: "MID",
+    high: "HIGH",
+    conductorField: "MOUSE CONDUCTOR FIELD",
+    gestureTrail: "gesture trail: . : + * # @",
+    noMouseSignal: "NO MOUSE SIGNAL",
+    sessionId: "SESSION-ID",
+    rootMode: "ROOT-MODE",
+    clock: "CLOCK",
+    srcTime: "SRC-TIME",
+    keyPulse: "KEY-PULSE",
+    motionVec: "MOTION-VEC",
+  },
+  zh: {
+    analysisTitle: "分析舱 / 响应回放",
+    loadFile: "[ 载入文件 ]",
+    noFile: "未选择文件",
+    simData: "[ 模拟数据 ]",
+    runLength: "运行时长",
+    seconds: "秒",
+    buffer: "[ 缓冲 ]",
+    playIcon: "▶",
+    pauseIcon: "❚❚",
+    stopIcon: "■",
+    playLabel: "播放",
+    pauseLabel: "暂停",
+    stopLabel: "停止",
+    dumpWav: "[ 导出 WAV ]",
+    statusPrefix: "SYS/84A >",
+    sessionOption: "-- 选择记录 --",
+    noSession: "未载入记录 / 载入 JSONL 或执行模拟数据",
+    behaviorTitle: "行为密度时间线",
+    sessionSuffix: "会话",
+    keyboardInput: "+ 键盘输入",
+    mouseMovement: "+ 鼠标移动",
+    specialEvents: "* 特殊事件",
+    noteField: "键盘音符场",
+    low: "低",
+    mid: "中",
+    high: "高",
+    conductorField: "鼠标指挥场",
+    gestureTrail: "手势轨迹: . : + * # @",
+    noMouseSignal: "无鼠标信号",
+    sessionId: "会话编号",
+    rootMode: "调式",
+    clock: "速度",
+    srcTime: "源时长",
+    keyPulse: "键盘脉冲",
+    motionVec: "鼠标向量",
+  },
+};
+let currentLang = localStorage.getItem("kdsLang") || "en";
+let currentFileName = "";
+let lastStatusText = "";
+const isEmbeddedDesktop = new URLSearchParams(location.search).get("desktop") === "1";
+let toneLoadPromise = null;
+
+function t(key) {
+  return (UI_TEXT[currentLang] && UI_TEXT[currentLang][key]) || UI_TEXT.en[key] || key;
+}
+
+function setFileName(name) {
+  currentFileName = name || "";
+  const el = $("fileName");
+  if (el) el.textContent = currentFileName || t("noFile");
+}
+
+function setLanguage(lang, persist = true) {
+  if (lang !== "zh" && lang !== "en") return;
+  currentLang = lang;
+  if (persist) localStorage.setItem("kdsLang", currentLang);
+  applyLanguage();
+}
+
+function applyLanguage() {
+  document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-label-key]").forEach((el) => {
+    const label = t(el.dataset.labelKey);
+    el.setAttribute("aria-label", label);
+    el.setAttribute("title", label);
+  });
+  const toggle = $("langToggle");
+  if (toggle) {
+    toggle.textContent = currentLang === "zh" ? "[ EN ]" : "[ 中文 ]";
+    toggle.style.display = isEmbeddedDesktop ? "none" : "";
+  }
+  setFileName(currentFileName);
+  const sessionSelect = $("sessionSelect");
+  if (sessionSelect && sessionSelect.options.length) sessionSelect.options[0].textContent = t("sessionOption");
+  if (lastStatusText) setStatus(lastStatusText);
+  else if (events.length <= 1) {
+    const info = $("info");
+    if (info) info.textContent = t("noSession");
+  }
+  updateInfo();
+  drawTimeDisplay();
+}
+
 function fitCanvas() {
   const dpr = window.devicePixelRatio || 1;
   for (const c of [waveCanvas, keysCanvas, canvas]) {
@@ -331,18 +543,71 @@ function fitCanvas() {
 window.addEventListener("resize", fitCanvas);
 
 function updateInfo() {
-  if (!palette) return;
+  const info = $("info");
+  if (!palette) {
+    if (info) info.textContent = t("noSession");
+    updateTelemetry();
+    return;
+  }
   const src = totalDuration.toFixed(1);
-  $("info").innerHTML = `
-    <span class="chip">session: ${sessionId}</span>
-    <span class="chip">${palette.rootName} ${palette.modeName}</span>
-    <span class="chip">BPM ${palette.bpm}</span>
-    <span class="chip">源 ${src}s</span>
-    <span class="chip">${noteEvents.length} 音符</span>
-    <span class="chip">${mouseEvents.length} 鼠标点</span>
-  `;
+  if (info) {
+    info.innerHTML = `
+      <span class="chip">${t("sessionId")} ${sessionId || "NO-SIGNAL"}</span>
+      <span class="chip">${t("rootMode")} ${palette.rootName}/${palette.modeName}</span>
+      <span class="chip">${t("clock")} ${palette.bpm} BPM</span>
+      <span class="chip">${t("srcTime")} ${src}s</span>
+      <span class="chip">${t("keyPulse")} ${noteEvents.length}</span>
+      <span class="chip">${t("motionVec")} ${mouseEvents.length}</span>
+    `;
+  }
+  updateTelemetry();
 }
-function setStatus(s) { $("status").textContent = s; }
+
+function setText(id, value) {
+  const el = $(id);
+  if (el) el.textContent = value;
+}
+
+function telemetrySeed(label, min, max) {
+  const n = (hashStr(`${sessionId || "KDS"}:${label}`) % 1000) / 1000;
+  return min + (max - min) * n;
+}
+
+function updateTelemetry() {
+  const srcDur = Math.max(1, totalDuration || 1);
+  const keyRate = totalDuration > 0 ? noteEvents.length / srcDur : 0;
+  const mouseRate = totalDuration > 0 ? mouseEvents.length / srcDur : 0;
+  const special = noteEvents.filter((e) => !["letter", "number"].includes(e.cat)).length + clickEvents.length;
+  const energy = mouseMod.length ? mouseMod.reduce((sum, m) => sum + m.sp, 0) / mouseMod.length : 0;
+  const sweep = mouseMod.length ? mouseMod.reduce((sum, m) => sum + m.sweep, 0) / mouseMod.length : 0;
+  const drift = Math.min(9.99, telemetrySeed("drift", 0.12, 2.7) + sweep * 1.35);
+  const stability = Math.max(9, Math.min(99, Math.round(61 + Math.min(25, keyRate * 6) - Math.min(18, drift * 2) + telemetrySeed("stab", -4, 5))));
+  const latency = Math.round(14 + energy * 58 + telemetrySeed("lat", 0, 13));
+  const cpu = Math.round(Math.max(35, Math.min(96, 51 + keyRate * 2.6 + mouseRate * 0.09 + energy * 34 + telemetrySeed("cpu", -6, 12))));
+  const state = isPlaying ? "EXEC" : recordingState === "recording" ? "REC" : recordingState === "paused" ? "HOLD" : "STBY";
+
+  setText("mastStability", `${stability}%`);
+  setText("mastDensity", (keyRate + mouseRate * 0.015).toFixed(2));
+  setText("mastMotion", mouseRate.toFixed(2));
+  setText("mastDrift", drift.toFixed(2));
+  setText("mastLatency", `${latency} MS`);
+  setText("mastState", state);
+  setText("diagKeys", String(noteEvents.length).padStart(4, "0"));
+  setText("diagMouse", String(mouseEvents.length).padStart(4, "0"));
+  setText("diagSpecial", String(special).padStart(4, "0"));
+  setText("diagMode", palette ? `${palette.rootName}/${palette.modeName}` : "--");
+  setText("diagBpm", palette ? String(palette.bpm) : "--");
+  setText("diagEnergy", energy.toFixed(2));
+  setText("diagDrift", drift.toFixed(2));
+  setText("diagCpu", `${cpu}%`);
+  setText("diagLatency", `${latency}MS`);
+}
+function setStatus(s) {
+  lastStatusText = s || "";
+  const status = $("status");
+  if (status) status.textContent = `${t("statusPrefix")} ${lastStatusText}`;
+  updateTelemetry();
+}
 
 function updateButtons() {
   const hasData = events.length > 1 && totalDuration > 0;
@@ -353,6 +618,7 @@ function updateButtons() {
   $("stopBtn").disabled = !hasData;
   $("downloadBtn").disabled = !hasBuf;
   $("progressBar").classList.toggle("disabled", !hasData);
+  updateTelemetry();
 }
 
 function buildKeyboardCueEvents(mt, totalPb) {
@@ -566,11 +832,7 @@ function scheduleEverything(palette, mt, totalPb, transport) {
 // ---------- Render (offline) ----------
 async function renderOffline() {
   if (events.length <= 1 || totalDuration <= 0) {
-    setStatus("先加载一段录制");
-    return;
-  }
-  if (typeof Tone === "undefined") {
-    setStatus("音乐库未加载；联网后重试，或之后改成离线版。");
+    setStatus("NO INPUT ARCHIVE");
     return;
   }
   resetPlayback();
@@ -579,7 +841,7 @@ async function renderOffline() {
   keyboardCueEvents = [];
   waveformPeaks = [];
   updateButtons();
-  setStatus("正在生成 WAV 缓冲…");
+  setStatus("BUFFERING AUDIO MATRIX");
 
   targetDuration = Math.max(10, parseInt($("targetDur").value, 10) || 180);
   const speed = totalDuration > 0 ? totalDuration / targetDuration : 1;
@@ -588,17 +850,18 @@ async function renderOffline() {
   keyboardCueEvents = buildKeyboardCueEvents(mt, targetDuration);
 
   try {
+    await ensureTone();
     const buf = await Tone.Offline(async () => {
       scheduleEverything(palette, mt, targetDuration, Tone.Transport);
       Tone.Transport.start();
     }, renderLen);
     renderedBuffer = buf;
     renderedAudioBuffer = getRenderedAudioBuffer();
-    setStatus(`WAV 缓冲已生成 ${formatTime(buf.duration)} · 源 ${formatTime(totalDuration)} → ${(speed).toFixed(1)}×`);
+    setStatus(`BUFFER READY ${formatTime(buf.duration)} / SOURCE ${formatTime(totalDuration)} / ${speed.toFixed(1)}X`);
     updateButtons();
     drawTimeDisplay();
   } catch (e) {
-    setStatus("渲染失败: " + e.message);
+    setStatus("BUFFER FAILURE: " + e.message);
     console.error(e);
   }
 }
@@ -628,6 +891,31 @@ function disposeLiveGraph() {
 function getPlaybackDuration() {
   const audioBuffer = getRenderedAudioBuffer();
   return audioBuffer ? audioBuffer.duration : targetDuration;
+}
+
+function ensureTone() {
+  if (typeof Tone !== "undefined") return Promise.resolve(Tone);
+  if (toneLoadPromise) return toneLoadPromise;
+  toneLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const timer = setTimeout(() => {
+      script.remove();
+      reject(new Error("Tone.js load timeout"));
+    }, 9000);
+    script.src = "https://unpkg.com/tone@14.8.49/build/Tone.js";
+    script.async = true;
+    script.onload = () => {
+      clearTimeout(timer);
+      if (typeof Tone === "undefined") reject(new Error("Tone.js unavailable"));
+      else resolve(Tone);
+    };
+    script.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("Tone.js network unavailable"));
+    };
+    document.head.appendChild(script);
+  });
+  return toneLoadPromise;
 }
 
 function getNativeContext() {
@@ -703,7 +991,7 @@ function scheduleKick(ctx, dest, when, level) {
 
 function playNativeAudio() {
   if (events.length <= 1 || totalDuration <= 0) {
-    setStatus("先加载数据或点生成测试数据");
+    setStatus("NO INPUT ARCHIVE");
     return;
   }
   try {
@@ -808,20 +1096,20 @@ function playNativeAudio() {
       stopNativeGraph();
       updateButtons();
       drawTimeDisplay();
-      setStatus("播放结束");
+      setStatus("EXECUTION COMPLETE");
     }, endMs));
 
     playerStartCtxTime = ctx.currentTime;
     playerStartOffset = offset;
     isPlaying = true;
     updateButtons();
-    setStatus("Web Audio 实时播放中");
+    setStatus("REALTIME AUDIO MATRIX EXECUTING");
     startProgressLoop();
   } catch (e) {
     isPlaying = false;
     stopNativeGraph();
     updateButtons();
-    setStatus("播放失败: " + (e && e.message ? e.message : e));
+    setStatus("EXECUTION FAILURE: " + (e && e.message ? e.message : e));
   }
 }
 
@@ -829,11 +1117,11 @@ async function play() {
   return playNativeAudio();
 
   if (events.length <= 1 || totalDuration <= 0) {
-    setStatus("先加载数据或点生成测试数据");
+    setStatus("NO INPUT ARCHIVE");
     return;
   }
   if (typeof Tone === "undefined") {
-    setStatus("音乐库未加载；联网后重试。");
+    setStatus("AUDIO LIBRARY OFFLINE");
     return;
   }
   try {
@@ -857,20 +1145,20 @@ async function play() {
       disposeLiveGraph();
       updateButtons();
       drawTimeDisplay();
-      setStatus("播放结束");
+      setStatus("EXECUTION COMPLETE");
     }, targetDuration);
     Tone.Transport.start("+0.03", offset);
     playerStartCtxTime = ctx.currentTime;
     playerStartOffset = offset;
     isPlaying = true;
     updateButtons();
-    setStatus("实时播放中");
+    setStatus("REALTIME AUDIO MATRIX EXECUTING");
     startProgressLoop();
   } catch (e) {
     isPlaying = false;
     disposeLiveGraph();
     updateButtons();
-    setStatus("播放失败: " + (e && e.message ? e.message : e));
+    setStatus("EXECUTION FAILURE: " + (e && e.message ? e.message : e));
   }
 }
 
@@ -887,7 +1175,7 @@ function pause() {
   disposeLiveGraph();
   isPlaying = false;
   updateButtons();
-  setStatus("已暂停");
+  setStatus("EXECUTION HOLD");
 }
 
 function stop() {
@@ -904,7 +1192,7 @@ function stop() {
   isPlaying = false;
   pauseOffset = 0;
   updateButtons();
-  setStatus("已停止");
+  setStatus("EXECUTION ABORTED");
   drawTimeDisplay();
 }
 
@@ -953,7 +1241,7 @@ function getCurrentTime() {
   if (events.length <= 1 || totalDuration <= 0) return 0;
   const duration = getPlaybackDuration();
   if (isPlaying) {
-    const ctx = getPlaybackContext();
+    const ctx = nativeCtx || getPlaybackContext();
     return Math.min(duration,
       playerStartOffset + ((ctx ? ctx.currentTime : 0) - playerStartCtxTime));
   }
@@ -1006,6 +1294,7 @@ function getRenderedAudioBuffer() {
 
 function getPlaybackContext() {
   if (nativeCtx) return nativeCtx;
+  if (typeof Tone === "undefined") return null;
   const ctx = (Tone.getContext && Tone.getContext()) || Tone.context;
   return (ctx && (ctx.rawContext || ctx._context)) || ctx;
 }
@@ -1055,79 +1344,143 @@ function cueColor(cat) {
   return "#4ade80";
 }
 
+function asciiSetup(ctx, size = 12) {
+  ctx.font = `${size}px "Cascadia Mono", "Microsoft YaHei UI", "Microsoft YaHei", "Consolas", "Courier New", monospace`;
+  ctx.textBaseline = "top";
+  ctx.lineWidth = 1;
+}
+
+function asciiClear(ctx, W, H) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#02070b";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(139, 231, 255, 0.035)";
+  for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1);
+  ctx.restore();
+}
+
+function asciiText(ctx, text, x, y, color = "#c8f3ff", glow = 8, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = glow;
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function glyphForCat(cat) {
+  if (cat === "space") return "_";
+  if (cat === "backspace") return "<";
+  if (cat === "enter") return "!";
+  if (cat === "number") return "+";
+  if (cat === "symbol") return "*";
+  if (cat === "modifier") return "^";
+  return ".";
+}
+
+function densityGlyph(v) {
+  const chars = " .:-=+*#%@";
+  return chars[Math.max(0, Math.min(chars.length - 1, Math.floor(v * (chars.length - 1))))];
+}
+
 function drawWaveform(currentTime) {
   const ctx = waveCanvas.getContext("2d");
   const W = waveCanvas.clientWidth, H = waveCanvas.clientHeight;
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "#14141c";
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = "rgba(208, 208, 224, 0.12)";
-  ctx.beginPath();
-  ctx.moveTo(0, H / 2);
-  ctx.lineTo(W, H / 2);
-  ctx.stroke();
+  asciiSetup(ctx, 11);
+  asciiClear(ctx, W, H);
 
   const audioBuffer = getRenderedAudioBuffer();
+  const duration = audioBuffer ? audioBuffer.duration : getPlaybackDuration();
+  const left = 184, right = 18, top = 30, bottom = 20;
+  const charW = 7.2, charH = 10;
+  const plotW = Math.max(40, W - left - right);
+  const cols = Math.max(24, Math.floor(plotW / charW));
+  const rows = Math.max(5, Math.floor((H - top - bottom) / charH));
   if (!waveformPeaks.length || waveformPeakWidth !== Math.floor(W)) {
     waveformPeakWidth = Math.floor(W);
-    waveformPeaks = audioBuffer ? buildWaveformPeaks(audioBuffer, W) : buildActivityPeaks(W);
+    waveformPeaks = audioBuffer ? buildWaveformPeaks(audioBuffer, cols) : buildActivityPeaks(cols);
   }
-  const duration = audioBuffer ? audioBuffer.duration : getPlaybackDuration();
-  const playX = duration > 0 ? (currentTime / duration) * W : 0;
-  const barW = W / waveformPeaks.length;
-  for (let i = 0; i < waveformPeaks.length; i++) {
-    const x = i * barW;
-    const amp = Math.max(1, waveformPeaks[i] * (H * 0.42));
-    ctx.fillStyle = x <= playX ? "rgba(95, 192, 255, 0.85)" : "rgba(160, 160, 184, 0.32)";
-    ctx.fillRect(x, H / 2 - amp, Math.max(1, barW * 0.7), amp * 2);
+
+  asciiText(ctx, t("behaviorTitle"), 18, 14, "#effbff", 10);
+  asciiText(ctx, `(${formatTime(duration)} ${t("sessionSuffix")})`, 18, 32, "#9bb8c0", 4);
+  asciiText(ctx, t("keyboardInput"), 24, 58, "#9ff7c2", 8);
+  asciiText(ctx, t("mouseMovement"), 24, 76, "#8be7ff", 8);
+  asciiText(ctx, t("specialEvents"), 24, 94, "#ffb36b", 8);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(139,231,255,0.18)";
+  for (let i = 0; i <= 4; i++) {
+    const x = left + (plotW * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(x, 12);
+    ctx.lineTo(x, H - 18);
+    ctx.stroke();
+    asciiText(ctx, formatTime((duration * i) / 4), x - 16, H - 15, i === 0 ? "#effbff" : "#9bb8c0", 4, 0.88);
   }
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(Math.max(0, Math.min(W - 2, playX)), 8, 2, H - 16);
+  ctx.restore();
+
+  const playCol = duration > 0 ? Math.floor((currentTime / duration) * cols) : 0;
+  for (let c = 0; c < cols; c++) {
+    const peak = waveformPeaks[c] || 0.02;
+    const x = left + c * charW;
+    const filledRows = Math.max(1, Math.round(peak * rows));
+    for (let r = 0; r < rows; r++) {
+      const y = top + r * charH;
+      const active = rows - r <= filledRows;
+      const nearPlay = Math.abs(c - playCol) <= 1;
+      const glyph = active ? densityGlyph(peak + (rows - r) / rows * 0.25) : ".";
+      const color = nearPlay ? "#effbff" : active ? "#8be7ff" : "rgba(96,141,153,0.46)";
+      asciiText(ctx, glyph, x, y, color, nearPlay ? 16 : 7, active ? 0.92 : 0.42);
+    }
+  }
+  const playX = left + Math.max(0, Math.min(cols - 1, playCol)) * charW;
+  asciiText(ctx, "|", playX, 13, "#ffffff", 18);
+  asciiText(ctx, "|", playX, H - 32, "#ffffff", 18);
 }
 
 function drawKeyboardTimeline(currentTime) {
   const ctx = keysCanvas.getContext("2d");
   const W = keysCanvas.clientWidth, H = keysCanvas.clientHeight;
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "#14141c";
-  ctx.fillRect(0, 0, W, H);
+  asciiSetup(ctx, 11);
+  asciiClear(ctx, W, H);
   const audioBuffer = getRenderedAudioBuffer();
   const duration = audioBuffer ? audioBuffer.duration : targetDuration;
   if (!duration || duration <= 0) return;
 
-  ctx.strokeStyle = "rgba(208, 208, 224, 0.08)";
-  for (let i = 1; i < 4; i++) {
-    const y = (H / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
+  asciiText(ctx, t("noteField"), 18, 10, "#effbff", 10);
+  asciiText(ctx, t("low"), 18, 34, "#608d99", 3);
+  asciiText(ctx, t("mid"), 18, 52, "#608d99", 3);
+  asciiText(ctx, t("high"), 18, 70, "#608d99", 3);
+
+  const left = 72, right = 16, top = 24, lanes = 4;
+  const plotW = W - left - right;
+  for (let i = 0; i <= 4; i++) {
+    const x = left + (plotW * i) / 4;
+    asciiText(ctx, "|", x, 8, "rgba(139,231,255,0.35)", 4, 0.75);
+    asciiText(ctx, "|", x, H - 18, "rgba(139,231,255,0.35)", 4, 0.75);
   }
 
   for (const cue of keyboardCueEvents) {
-    const x = (cue.t / duration) * W;
+    const x = left + (cue.t / duration) * plotW;
     const lane = Math.abs(cue.midi || 0) % 4;
-    const y = 12 + lane * ((H - 24) / 3);
+    const y = top + lane * ((H - top - 14) / (lanes - 1));
     const until = cue.t - currentTime;
     const hit = Math.abs(until) < 0.13;
     const upcoming = until >= 0 && until <= 2.0;
     const alpha = hit ? 1 : upcoming ? 0.85 - until * 0.18 : cue.t < currentTime ? 0.28 : 0.48;
-    const radius = hit ? 8 : upcoming ? 5.5 : 3.5;
-    ctx.fillStyle = cueColor(cue.cat);
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
+    const glyph = hit ? "@" : upcoming ? "*" : glyphForCat(cue.cat);
+    asciiText(ctx, glyph, x, y, cueColor(cue.cat), hit ? 18 : upcoming ? 13 : 7, alpha);
     if (upcoming || hit) {
-      ctx.globalAlpha = Math.max(0.18, alpha * 0.35);
-      ctx.fillRect(x - 1, 4, 2, H - 8);
+      asciiText(ctx, "|", x, 8, "#effbff", 13, Math.max(0.22, alpha * 0.44));
+      asciiText(ctx, "|", x, H - 20, "#effbff", 13, Math.max(0.22, alpha * 0.44));
     }
-    ctx.globalAlpha = 1;
   }
 
-  const playX = (currentTime / duration) * W;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(Math.max(0, Math.min(W - 2, playX)), 4, 2, H - 8);
+  const playX = left + (currentTime / duration) * plotW;
+  asciiText(ctx, "|", Math.max(left, Math.min(left + plotW, playX)), 8, "#ffffff", 18);
+  asciiText(ctx, "^", Math.max(left, Math.min(left + plotW, playX)) - 3, H - 18, "#ffffff", 18);
 }
 
 function drawMusicVisuals() {
@@ -1139,7 +1492,7 @@ function drawMusicVisuals() {
 function drawTimeDisplay() {
   const t = getCurrentTime();
   const audioBuffer = getRenderedAudioBuffer();
-  const total = audioBuffer ? audioBuffer.duration : (renderedBuffer ? renderedBuffer.duration : 0);
+  const total = audioBuffer ? audioBuffer.duration : (events.length > 1 ? targetDuration : 0);
   const pct = total > 0 ? Math.min(1, t / total) : 0;
   $("progressFill").style.width = (pct * 100) + "%";
   $("timeDisplay").textContent = formatTime(t) + " / " + formatTime(total);
@@ -1160,11 +1513,20 @@ function startProgressLoop() {
 // ---------- Trail viz ----------
 let mouseIdxCache = 0;
 function drawTrail() {
-  if (!bounds || mouseEvents.length === 0) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  asciiSetup(ctx, 12);
+  asciiClear(ctx, W, H);
+  asciiText(ctx, t("conductorField"), 18, 14, "#effbff", 10);
+  asciiText(ctx, t("gestureTrail"), 18, 34, "#608d99", 4);
+  if (!bounds || mouseEvents.length === 0) {
+    asciiText(ctx, t("noMouseSignal"), 18, 58, "#ffb36b", 8);
+    return;
+  }
   const tPb = getCurrentTime();
   const speed = totalDuration / targetDuration;
   const tSrc = tPb * speed;
-  const trailLen = 4.0;
+  const trailLen = 5.5;
   if (mouseIdxCache > 0 && mouseEvents[mouseIdxCache - 1] && mouseEvents[mouseIdxCache - 1].t > tSrc) {
     mouseIdxCache = 0;
   }
@@ -1173,27 +1535,59 @@ function drawTrail() {
   let startIdx = endIdx;
   while (startIdx > 0 && mouseEvents[startIdx - 1].t > tSrc - trailLen) startIdx--;
 
-  const ctx = canvas.getContext("2d");
-  const W = canvas.clientWidth, H = canvas.clientHeight;
-  ctx.clearRect(0, 0, W, H);
-  if (endIdx - startIdx >= 2) {
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for (let i = startIdx + 1; i < endIdx; i++) {
-      const prev = mouseEvents[i - 1], curr = mouseEvents[i];
-      const age = tSrc - curr.t;
-      const alpha = Math.max(0, 1 - age / trailLen);
-      ctx.strokeStyle = `rgba(95, 192, 255, ${alpha.toFixed(3)})`;
-      ctx.lineWidth = 1.5 + alpha * 3;
-      ctx.beginPath();
-      ctx.moveTo(normX(prev.x) * W, normY(prev.y) * H);
-      ctx.lineTo(normX(curr.x) * W, normY(curr.y) * H);
-      ctx.stroke();
+  const left = 18, top = 58, right = 18, bottom = 18;
+  const charW = 8.2, charH = 13;
+  const cols = Math.max(28, Math.floor((W - left - right) / charW));
+  const rows = Math.max(10, Math.floor((H - top - bottom) / charH));
+  const grid = Array.from({ length: rows }, () => Array(cols).fill(" "));
+  const alphaGrid = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const m = mouseEvents[i];
+    const age = Math.max(0, tSrc - m.t);
+    const alpha = Math.max(0, 1 - age / trailLen);
+    const x = Math.max(0, Math.min(cols - 1, Math.floor(normX(m.x) * (cols - 1))));
+    const y = Math.max(0, Math.min(rows - 1, Math.floor(normY(m.y) * (rows - 1))));
+    const glyph = alpha > 0.82 ? "@" : alpha > 0.62 ? "#" : alpha > 0.42 ? "*" : alpha > 0.22 ? "+" : ".";
+    if (alpha >= alphaGrid[y][x]) {
+      grid[y][x] = glyph;
+      alphaGrid[y][x] = alpha;
     }
-    const head = mouseEvents[endIdx - 1];
-    ctx.fillStyle = "#ffffff";
+  }
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(139,231,255,0.08)";
+  for (let c = 0; c <= cols; c += Math.max(6, Math.floor(cols / 8))) {
+    const x = left + c * charW;
     ctx.beginPath();
-    ctx.arc(normX(head.x) * W, normY(head.y) * H, 4, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(x, top - 6);
+    ctx.lineTo(x, top + rows * charH);
+    ctx.stroke();
+  }
+  for (let r = 0; r <= rows; r += Math.max(3, Math.floor(rows / 5))) {
+    const y = top + r * charH;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + cols * charW, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const glyph = grid[r][c];
+      if (glyph === " ") continue;
+      const alpha = alphaGrid[r][c];
+      const hot = glyph === "@" || glyph === "#";
+      asciiText(ctx, glyph, left + c * charW, top + r * charH, hot ? "#effbff" : "#8be7ff", hot ? 18 : 9, Math.max(0.24, alpha));
+    }
+  }
+
+  if (endIdx > 0) {
+    const head = mouseEvents[endIdx - 1];
+    const hx = left + Math.max(0, Math.min(cols - 1, Math.floor(normX(head.x) * (cols - 1)))) * charW;
+    const hy = top + Math.max(0, Math.min(rows - 1, Math.floor(normY(head.y) * (rows - 1)))) * charH;
+    asciiText(ctx, "@", hx, hy, "#ffffff", 22);
   }
 }
 
@@ -1237,7 +1631,7 @@ function downloadWav() {
   if (!renderedBuffer) return;
   const audioBuffer = getRenderedAudioBuffer();
   if (!audioBuffer) {
-    setStatus("下载失败: 无法读取渲染后的音频缓冲");
+    setStatus("DUMP FAILURE: AUDIO BUFFER UNREADABLE");
     return;
   }
   const blob = audioBufferToWav(audioBuffer);
@@ -1247,7 +1641,7 @@ function downloadWav() {
     reader.onload = async () => {
       const b64 = reader.result.split(",")[1];
       const saved = await window.pywebview.api.save_wav(filename, b64);
-      setStatus("已保存到: " + saved);
+      setStatus("DUMP WRITTEN: " + saved);
     };
     reader.readAsDataURL(blob);
   } else {
@@ -1256,7 +1650,7 @@ function downloadWav() {
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus("已下载: " + filename);
+    setStatus("DUMP FILE: " + filename);
   }
 }
 
@@ -1309,7 +1703,8 @@ async function refreshSessionList() {
   if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.list_sessions) return;
   const list = await window.pywebview.api.list_sessions();
   const sel = $("sessionSelect");
-  sel.innerHTML = '<option value="">— 选择 session —</option>';
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${t("sessionOption")}</option>`;
   for (const s of (list || [])) {
     const opt = document.createElement("option");
     opt.value = s.path;
@@ -1319,13 +1714,13 @@ async function refreshSessionList() {
     sel.appendChild(opt);
   }
   sel.style.display = "";
-  $("fileInput").style.display = "none";
   if (!sessionListBound) {
     sel.addEventListener("change", async () => {
       if (!sel.value) return;
       const text = await window.pywebview.api.read_session(sel.value);
       ingest(parseJsonl(text));
-      setStatus("已加载: " + sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
+      setFileName(sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
+      setStatus("ARCHIVE LOADED: " + sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
     });
     sessionListBound = true;
   }
@@ -1356,23 +1751,28 @@ function applyRecState(s) {
   const pauseBtn = $("recPause");
   const stopBtn = $("recStop");
   const bgBtn = $("recBackground");
+  if (!light || !status || !startBtn || !pauseBtn || !stopBtn || !bgBtn) {
+    updateTelemetry();
+    return;
+  }
 
   light.classList.remove("recording", "paused");
   if (recordingState === "recording") {
     light.classList.add("recording");
-    status.textContent = `录制中 ${fmtElapsed(s.elapsed)} · ${fmtSize(s.size)}`;
+    status.textContent = `REC BUS ACTIVE / ${fmtElapsed(s.elapsed)} / ${fmtSize(s.size)}`;
     startBtn.disabled = true; pauseBtn.disabled = false; stopBtn.disabled = false; bgBtn.disabled = false;
-    pauseBtn.textContent = "❚❚ 暂停";
+    pauseBtn.textContent = "[ HOLD ]";
   } else if (recordingState === "paused") {
     light.classList.add("paused");
-    status.textContent = `已暂停 ${fmtElapsed(s.elapsed)} · ${fmtSize(s.size)}`;
+    status.textContent = `CAPTURE HOLD / ${fmtElapsed(s.elapsed)} / ${fmtSize(s.size)}`;
     startBtn.disabled = true; pauseBtn.disabled = false; stopBtn.disabled = false; bgBtn.disabled = false;
-    pauseBtn.textContent = "▶ 继续";
+    pauseBtn.textContent = "[ RESUME ]";
   } else {
-    status.textContent = "未录制";
+    status.textContent = "IDLE / NO CAPTURE";
     startBtn.disabled = false; pauseBtn.disabled = true; stopBtn.disabled = true; bgBtn.disabled = true;
-    pauseBtn.textContent = "❚❚ 暂停";
+    pauseBtn.textContent = "[ STBY ]";
   }
+  updateTelemetry();
 }
 
 async function pollStatus() {
@@ -1388,7 +1788,7 @@ async function onStartRecord() {
   const r = await window.pywebview.api.start_recording();
   if (!r || !r.ok) return;
   await pollStatus();
-  setStatus("记录已开始。需要后台时点“后台运行”。");
+  setStatus("CAPTURE BUS ARMED / MIN PANEL AVAILABLE");
 }
 async function onPauseRecord() {
   if (!window.pywebview) return;
@@ -1398,7 +1798,7 @@ async function onPauseRecord() {
 async function onBackgroundRecord() {
   if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.minimize_window) return;
   const ok = await window.pywebview.api.minimize_window();
-  if (!ok) setStatus("当前窗口环境不支持后台最小化");
+  if (!ok) setStatus("MIN PANEL UNSUPPORTED IN CURRENT SHELL");
 }
 function onStopRecord() {
   $("stopName").value = "";
@@ -1416,9 +1816,9 @@ async function doStopWithName(name) {
       const text = await window.pywebview.api.read_session(r.path);
       ingest(parseJsonl(text));
       $("sessionSelect").value = r.path;
-      setStatus("已保存并加载: " + (r.name || ""));
+      setStatus("ARCHIVED AND LOADED: " + (r.name || ""));
     } else {
-      setStatus("已保存: " + (r.name || ""));
+      setStatus("ARCHIVED: " + (r.name || ""));
     }
   }
 }
@@ -1430,35 +1830,50 @@ window.addEventListener("pywebviewready", () => {
 });
 
 // ---------- Wire up ----------
-$("fileInput").addEventListener("change", async (e) => {
+function bind(id, eventName, handler) {
+  const el = $(id);
+  if (el) el.addEventListener(eventName, handler);
+}
+
+bind("langToggle", "click", () => {
+  setLanguage(currentLang === "zh" ? "en" : "zh");
+});
+bind("loadBtn", "click", () => {
+  const fileInput = $("fileInput");
+  if (fileInput) fileInput.click();
+});
+bind("fileInput", "change", async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   const text = await f.text();
   ingest(parseJsonl(text));
-  setStatus("已加载: " + f.name);
+  setFileName(f.name);
+  setStatus("ARCHIVE LOADED: " + f.name);
 });
-$("demoBtn").addEventListener("click", () => {
+bind("demoBtn", "click", () => {
   ingest(generateDemo(45));
-  setStatus("已生成 45s 测试数据（点播放）");
+  setFileName("SIM DATA");
+  setStatus("SIM DATA GENERATED / 45 SEC");
 });
-$("renderBtn").addEventListener("click", renderOffline);
-$("playBtn").addEventListener("click", play);
-$("pauseBtn").addEventListener("click", pause);
-$("stopBtn").addEventListener("click", stop);
-$("downloadBtn").addEventListener("click", downloadWav);
-$("recStart").addEventListener("click", onStartRecord);
-$("recPause").addEventListener("click", onPauseRecord);
-$("recStop").addEventListener("click", onStopRecord);
-$("recBackground").addEventListener("click", onBackgroundRecord);
-$("stopCancel").addEventListener("click", () => {
-  $("stopModal").classList.add("hidden");
-  setStatus("继续记录");
+bind("renderBtn", "click", renderOffline);
+bind("playBtn", "click", play);
+bind("pauseBtn", "click", pause);
+bind("stopBtn", "click", stop);
+bind("downloadBtn", "click", downloadWav);
+bind("recStart", "click", onStartRecord);
+bind("recPause", "click", onPauseRecord);
+bind("recStop", "click", onStopRecord);
+bind("recBackground", "click", onBackgroundRecord);
+bind("stopCancel", "click", () => {
+  const modal = $("stopModal");
+  if (modal) modal.classList.add("hidden");
+  setStatus("ARCHIVE CANCELLED / CAPTURE BUS HOLDS");
 });
-$("stopSave").addEventListener("click", () => doStopWithName($("stopName").value));
-$("stopName").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") doStopWithName($("stopName").value);
+bind("stopSave", "click", () => doStopWithName($("stopName") ? $("stopName").value : ""));
+bind("stopName", "keydown", (e) => {
+  if (e.key === "Enter") doStopWithName($("stopName") ? $("stopName").value : "");
 });
-$("progressBar").addEventListener("click", (e) => {
+bind("progressBar", "click", (e) => {
   if (events.length <= 1 || totalDuration <= 0) return;
   const rect = $("progressBar").getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
@@ -1466,6 +1881,7 @@ $("progressBar").addEventListener("click", (e) => {
   seek(pct * getPlaybackDuration());
 });
 
+applyLanguage();
 fitCanvas();
 updateButtons();
 </script>

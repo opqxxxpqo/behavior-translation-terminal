@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('renderer.html', '.'), ('samples', 'samples')]
+datas = [('desktop.html', '.'), ('renderer.html', '.'), ('samples', 'samples')]
 binaries = []
 hiddenimports = ['clr_loader', 'webview.platforms.edgechromium']
 tmp_ret = collect_all('webview')

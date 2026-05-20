@@ -51,6 +51,9 @@ _state_lock = threading.RLock()
 _write_lock = threading.Lock()
 _stop_event = threading.Event()
 _press_cat: dict = {}
+_tray_icon = None
+_tray_lock = threading.Lock()
+_app_window = None
 
 
 class _LASTINPUTINFO(ctypes.Structure):
@@ -308,6 +311,82 @@ def get_recording_status():
 
 # ----- pywebview JS API -----
 
+def _make_tray_image():
+    from PIL import Image, ImageDraw
+    img = Image.new("RGBA", (64, 64), (5, 5, 5, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((7, 7, 57, 57), outline=(190, 210, 216, 255), width=2)
+    draw.rectangle((13, 13, 51, 51), fill=(18, 21, 23, 255))
+    draw.text((16, 23), "KDS", fill=(235, 244, 246, 255))
+    return img
+
+
+def _show_window_from_tray(icon=None, item=None):
+    global _tray_icon
+    try:
+        if _app_window is not None:
+            _app_window.show()
+            try:
+                _app_window.restore()
+            except Exception:
+                pass
+    except Exception as exc:
+        _crash_log(exc)
+    with _tray_lock:
+        active = icon or _tray_icon
+        _tray_icon = None
+    try:
+        if active is not None:
+            active.stop()
+    except Exception:
+        pass
+
+
+def _open_sessions_from_tray(icon=None, item=None):
+    try:
+        os.startfile(str(LOG_DIR))
+    except Exception as exc:
+        _crash_log(exc)
+
+
+def _quit_from_tray(icon=None, item=None):
+    global _tray_icon
+    try:
+        if _state != "idle":
+            stop_recording(None)
+        active = icon or _tray_icon
+        with _tray_lock:
+            _tray_icon = None
+        if active is not None:
+            active.stop()
+        if _app_window is not None:
+            _app_window.destroy()
+    except Exception as exc:
+        _crash_log(exc)
+
+
+def _ensure_tray():
+    global _tray_icon
+    with _tray_lock:
+        if _tray_icon is not None:
+            return True
+        try:
+            import pystray
+            menu = pystray.Menu(
+                pystray.MenuItem("显示窗口 / Show", _show_window_from_tray, default=True),
+                pystray.MenuItem("打开记录文件夹", _open_sessions_from_tray),
+                pystray.MenuItem("退出 / Quit", _quit_from_tray),
+            )
+            icon = pystray.Icon("kds_conductor", _make_tray_image(), "乐团指挥", menu)
+            _tray_icon = icon
+            threading.Thread(target=icon.run, daemon=True).start()
+            return True
+        except Exception as exc:
+            _tray_icon = None
+            _crash_log(exc)
+            return False
+
+
 class Api:
     def __init__(self):
         self.window = None
@@ -367,11 +446,15 @@ class Api:
     def minimize_window(self):
         try:
             if self.window is None:
-                return False
+                return {"ok": False, "mode": "none"}
+            if _ensure_tray():
+                self.window.hide()
+                return {"ok": True, "mode": "tray"}
             self.window.minimize()
-            return True
-        except Exception:
-            return False
+            return {"ok": True, "mode": "minimize"}
+        except Exception as exc:
+            _crash_log(exc)
+            return {"ok": False, "mode": "error"}
 
     def open_log_folder(self):
         try:
@@ -394,32 +477,45 @@ class Api:
 
 
 def main_window():
+    global _app_window
     try:
         import webview
     except ImportError:
         _crash_log(RuntimeError("pywebview missing"))
         sys.exit(2)
 
-    renderer = RESOURCE_DIR / "renderer.html"
-    if not renderer.exists():
-        _crash_log(FileNotFoundError(f"renderer.html missing: {renderer}"))
+    entry = RESOURCE_DIR / "desktop.html"
+    if not entry.exists():
+        entry = RESOURCE_DIR / "renderer.html"
+    if not entry.exists():
+        _crash_log(FileNotFoundError(f"desktop.html/renderer.html missing in {RESOURCE_DIR}"))
         sys.exit(3)
 
     api = Api()
     window = webview.create_window(
         "乐团指挥",
-        url=renderer.as_uri(),
+        url=entry.as_uri(),
         js_api=api,
-        width=1200, height=820,
-        background_color="#0a0a0f",
+        width=1280, height=880,
+        background_color="#050505",
     )
+    _app_window = window
     api.set_window(window)
 
     def on_closing():
         # Auto-save if still recording when window closes
+        global _tray_icon
         try:
             if _state != "idle":
                 stop_recording(None)
+            with _tray_lock:
+                active = _tray_icon
+                _tray_icon = None
+            if active is not None:
+                try:
+                    active.stop()
+                except Exception:
+                    pass
         except Exception:
             pass
         return True
