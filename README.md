@@ -11,6 +11,12 @@
 
 ### 方式一：直接运行 Windows 程序
 
+下载地址：
+
+```txt
+https://github.com/opqxxxpqo/behavior-translation-terminal/releases/latest
+```
+
 打包产物位于：
 
 ```txt

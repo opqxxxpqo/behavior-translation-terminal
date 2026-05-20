@@ -64,6 +64,12 @@ build.bat
 dist\乐团指挥录制.exe
 ```
 
+GitHub Release 下载页：
+
+```txt
+https://github.com/opqxxxpqo/behavior-translation-terminal/releases/latest
+```
+
 ## 对外隐私说明
 
 建议分享时明确说明：
