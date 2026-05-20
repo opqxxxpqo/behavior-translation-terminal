@@ -46,6 +46,12 @@ Web Demo 地址：
 http://127.0.0.1:8765/renderer.html
 ```
 
+在线 Demo 地址：
+
+```txt
+https://opqxxxpqo.github.io/behavior-translation-terminal/renderer.html
+```
+
 ## 打包 Windows 程序
 
 ```bat

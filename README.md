@@ -44,6 +44,14 @@ start.bat
 
 ### 方式三：启动 Web Demo
 
+在线 Demo：
+
+```txt
+https://opqxxxpqo.github.io/behavior-translation-terminal/renderer.html
+```
+
+本地 Demo：
+
 ```bat
 web-demo.bat
 ```
