@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>乐团指挥 · 回看</title>
+<style>
+  body { margin: 0; background: #0a0a0f; color: #d0d0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding: 12px 16px; background: #14141c; border-bottom: 1px solid #2a2a3a; }
+  h1 { margin: 0 0 10px 0; font-size: 16px; font-weight: 500; letter-spacing: 0.5px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+  button, input[type=file]::file-selector-button {
+    background: #2a2a3a; color: #d0d0e0; border: 1px solid #3a3a4a;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #3a3a4a; }
+  input[type=file] { color: #8080a0; font-size: 12px; }
+  input[type=range] { vertical-align: middle; }
+  label { color: #a0a0b8; }
+  main { padding: 16px; }
+  #trail { display: block; width: 100%; height: 60vh; background: #14141c; border: 1px solid #2a2a3a; border-radius: 6px; }
+  #info { margin-top: 12px; font-size: 12px; color: #8080a0; line-height: 1.7; }
+  .chip { display: inline-block; padding: 2px 8px; background: #2a2a3a; border-radius: 3px; margin-right: 6px; color: #d0d0e0; }
+  .status { color: #5fc0ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>乐团指挥 · 回看</h1>
+  <div class="controls">
+    <input type="file" id="fileInput" accept=".jsonl,.json">
+    <button id="demoBtn">生成测试数据</button>
+    <button id="playBtn" disabled>▶ 播放</button>
+    <button id="stopBtn" disabled>■ 停止</button>
+    <label>速度 <input type="range" id="speed" min="1" max="32" step="1" value="4"> <span id="speedLabel">4×</span></label>
+    <span id="status" class="status"></span>
+  </div>
+</header>
+<main>
+  <canvas id="trail"></canvas>
+  <div id="info">加载 .jsonl 日志，或点"生成测试数据"试听。</div>
+</main>
+<script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+<script>
+// ---------- Seeded RNG ----------
+function hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  return function() {
+    let t = (seed += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- Music palette ----------
+const MODES = {
+  ionian:     [0, 2, 4, 5, 7, 9, 11],
+  dorian:     [0, 2, 3, 5, 7, 9, 10],
+  lydian:     [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  aeolian:    [0, 2, 3, 5, 7, 8, 10],
+  pentMinor:  [0, 3, 5, 7, 10],
+  pentMajor:  [0, 2, 4, 7, 9],
+};
+const MODE_NAMES = Object.keys(MODES);
+const OSC_TYPES = ["sine", "triangle", "fmsine", "amsine"];
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+function buildPalette(sessionId) {
+  const rng = mulberry32(hashStr(sessionId || "default"));
+  const modeName = MODE_NAMES[Math.floor(rng() * MODE_NAMES.length)];
+  const rootOffset = Math.floor(rng() * 12);
+  const osc = OSC_TYPES[Math.floor(rng() * OSC_TYPES.length)];
+  return {
+    sessionId,
+    modeName,
+    scale: MODES[modeName],
+    rootMidi: 48 + rootOffset,
+    rootName: NOTE_NAMES[rootOffset],
+    osc,
+  };
+}
+
+// ---------- Event -> note mapping ----------
+// [degreeIndex | "walk" | "repeat", octaveOffset, durationSec]
+const CAT_NOTE = {
+  letter:    ["walk", 0, 0.18],
+  number:    [6,      0, 0.22],
+  enter:     [0,      0, 0.55],
+  backspace: ["repeat", 0, 0.15],
+  modifier:  [0,     -1, 0.40],
+  symbol:    [4,      1, 0.20],
+  tab:       [3,      1, 0.30],
+  arrow:     ["walk", 0, 0.18],
+  fn:        [2,      1, 0.25],
+};
+const WALK_PATTERN = [0, 2, 4, 1, 3, 5, 2, 0];
+
+function makeNoteGen(palette) {
+  let walkStep = 0;
+  let lastMidi = palette.rootMidi;
+  return function(cat) {
+    const mapping = CAT_NOTE[cat];
+    if (!mapping) return null;
+    let [deg, oct, dur] = mapping;
+    if (deg === "repeat") return { midi: lastMidi, dur };
+    if (deg === "walk") {
+      deg = WALK_PATTERN[walkStep % WALK_PATTERN.length];
+      walkStep++;
+    }
+    const scaleLen = palette.scale.length;
+    const wrap = Math.floor(deg / scaleLen);
+    const scaleNote = palette.scale[deg % scaleLen];
+    const midi = palette.rootMidi + scaleNote + 12 * (oct + wrap);
+    lastMidi = midi;
+    return { midi, dur };
+  };
+}
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+// ---------- State ----------
+let events = [];
+let noteEvents = [];
+let mouseEvents = [];
+let clickEvents = [];
+let sessionId = "";
+let palette = null;
+let totalDuration = 0;
+let bounds = null; // {minX, minY, maxX, maxY} of mouse coords
+let speed = 4;
+
+let synth = null, filter = null, reverb = null, pluck = null;
+let trailFrame = null;
+let mouseIdx = 0;
+
+// ---------- File loading ----------
+function parseJsonl(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line)); } catch (e) { /* skip bad lines */ }
+  }
+  return out;
+}
+
+function ingest(rawEvents) {
+  events = rawEvents.slice().sort((a, b) => a.t - b.t);
+  noteEvents = events.filter(e => e.type === "key_down" && e.cat && CAT_NOTE[e.cat]);
+  mouseEvents = events.filter(e => e.type === "mouse_move" && typeof e.x === "number");
+  clickEvents = events.filter(e => e.type === "mouse_click" && e.pressed);
+
+  const session = events.find(e => e.type === "session_start");
+  sessionId = (session && session.session_id) || "anon-" + Date.now();
+
+  totalDuration = events.length ? events[events.length - 1].t : 0;
+
+  if (mouseEvents.length) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const m of mouseEvents) {
+      if (m.x < minX) minX = m.x; if (m.x > maxX) maxX = m.x;
+      if (m.y < minY) minY = m.y; if (m.y > maxY) maxY = m.y;
+    }
+    if (maxX === minX) maxX = minX + 1;
+    if (maxY === minY) maxY = minY + 1;
+    bounds = { minX, minY, maxX, maxY };
+  } else {
+    bounds = null;
+  }
+
+  palette = buildPalette(sessionId);
+  updateInfo();
+  document.getElementById("playBtn").disabled = noteEvents.length === 0;
+}
+
+function normX(x) { return (x - bounds.minX) / (bounds.maxX - bounds.minX); }
+function normY(y) { return (y - bounds.minY) / (bounds.maxY - bounds.minY); }
+
+// ---------- UI ----------
+const $ = (id) => document.getElementById(id);
+const canvas = $("trail");
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", fitCanvas);
+
+function updateInfo() {
+  const dur = totalDuration.toFixed(1);
+  const kc = noteEvents.length;
+  const mc = mouseEvents.length;
+  $("info").innerHTML = `
+    <span class="chip">session: ${sessionId}</span>
+    <span class="chip">${palette.rootName} ${palette.modeName}</span>
+    <span class="chip">osc: ${palette.osc}</span>
+    <span class="chip">${dur}s</span>
+    <span class="chip">${kc} 音符</span>
+    <span class="chip">${mc} 鼠标点</span>
+  `;
+}
+
+// ---------- Playback ----------
+async function play() {
+  await Tone.start();
+  stop();
+
+  synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: palette.osc },
+    envelope: { attack: 0.01, decay: 0.15, sustain: 0.2, release: 0.5 },
+  });
+  pluck = new Tone.MembraneSynth({
+    pitchDecay: 0.04, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
+  });
+  filter = new Tone.Filter(2000, "lowpass");
+  filter.Q.value = 1.2;
+  reverb = new Tone.Reverb({ decay: 2.5, wet: 0.25 });
+  synth.chain(filter, reverb, Tone.Destination);
+  pluck.chain(reverb, Tone.Destination);
+  synth.volume.value = -8;
+  pluck.volume.value = -14;
+
+  Tone.Transport.cancel();
+  Tone.Transport.position = 0;
+
+  const noteGen = makeNoteGen(palette);
+  const s = 1 / speed;
+
+  for (const ev of noteEvents) {
+    const n = noteGen(ev.cat);
+    if (!n) continue;
+    const t = ev.t * s;
+    const dur = Math.min(n.dur, 2.0) * s;
+    Tone.Transport.scheduleOnce((time) => {
+      synth.triggerAttackRelease(midiToFreq(n.midi), dur, time, 0.6);
+    }, t);
+  }
+
+  for (const ev of mouseEvents) {
+    const t = ev.t * s;
+    const yN = bounds ? normY(ev.y) : 0.5;
+    const cutoff = 250 + (1 - yN) * 6000;
+    Tone.Transport.scheduleOnce((time) => {
+      filter.frequency.cancelScheduledValues(time);
+      filter.frequency.linearRampToValueAtTime(cutoff, time + 0.05);
+    }, t);
+  }
+
+  for (const ev of clickEvents) {
+    const t = ev.t * s;
+    const pitch = ev.button === "right" ? "C2" : "G1";
+    Tone.Transport.scheduleOnce((time) => {
+      pluck.triggerAttackRelease(pitch, "8n", time);
+    }, t);
+  }
+
+  Tone.Transport.scheduleOnce(() => {
+    setStatus("结束");
+    stop();
+  }, totalDuration * s + 0.5);
+
+  Tone.Transport.start();
+  $("playBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("speed").disabled = true;
+  setStatus("播放中…");
+  mouseIdx = 0;
+  trailFrame = requestAnimationFrame(drawTrail);
+}
+
+function stop() {
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+  if (synth) { synth.dispose(); synth = null; }
+  if (filter) { filter.dispose(); filter = null; }
+  if (reverb) { reverb.dispose(); reverb = null; }
+  if (pluck) { pluck.dispose(); pluck = null; }
+  if (trailFrame) { cancelAnimationFrame(trailFrame); trailFrame = null; }
+  $("playBtn").disabled = noteEvents.length === 0;
+  $("stopBtn").disabled = true;
+  $("speed").disabled = false;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+}
+
+// ---------- Trail viz ----------
+function drawTrail() {
+  if (!bounds || mouseEvents.length === 0) {
+    trailFrame = requestAnimationFrame(drawTrail);
+    return;
+  }
+  const tNow = Tone.Transport.seconds; // already scaled by speed
+  const tReal = tNow * speed;          // playback position in source time
+  const trailLen = 4.0;                // source-seconds of trail
+
+  // advance mouseIdx forward through events
+  while (mouseIdx < mouseEvents.length && mouseEvents[mouseIdx].t <= tReal) mouseIdx++;
+  const endIdx = mouseIdx;
+  let startIdx = endIdx;
+  while (startIdx > 0 && mouseEvents[startIdx - 1].t > tReal - trailLen) startIdx--;
+
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  if (endIdx - startIdx >= 2) {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = startIdx + 1; i < endIdx; i++) {
+      const prev = mouseEvents[i - 1];
+      const curr = mouseEvents[i];
+      const age = tReal - curr.t;
+      const alpha = Math.max(0, 1 - age / trailLen);
+      ctx.strokeStyle = `rgba(95, 192, 255, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 1.5 + alpha * 3;
+      ctx.beginPath();
+      ctx.moveTo(normX(prev.x) * W, normY(prev.y) * H);
+      ctx.lineTo(normX(curr.x) * W, normY(curr.y) * H);
+      ctx.stroke();
+    }
+    // head dot
+    const head = mouseEvents[endIdx - 1];
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(normX(head.x) * W, normY(head.y) * H, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  trailFrame = requestAnimationFrame(drawTrail);
+}
+
+function setStatus(s) { $("status").textContent = s; }
+
+// ---------- Demo data ----------
+function round4(n) { return Math.round(n * 10000) / 10000; }
+function generateDemo(durationSec) {
+  durationSec = durationSec || 25;
+  const sid = "demo-" + Math.floor(Math.random() * 100000).toString(36);
+  const evs = [{ t: 0, type: "session_start", session_id: sid }];
+
+  // Typing bursts
+  let t = 0.4;
+  const cats = ["letter","letter","letter","letter","letter","letter","space","letter","number","letter"];
+  while (t < durationSec) {
+    const burstEnd = Math.min(durationSec, t + 1 + Math.random() * 3);
+    while (t < burstEnd) {
+      const c = cats[Math.floor(Math.random() * cats.length)];
+      evs.push({ t: round4(t), type: "key_down", cat: c });
+      evs.push({ t: round4(t + 0.04), type: "key_up", cat: c });
+      t += 0.07 + Math.random() * 0.18;
+    }
+    if (Math.random() < 0.6 && t < durationSec) {
+      const c = Math.random() < 0.5 ? "enter" : "backspace";
+      evs.push({ t: round4(t), type: "key_down", cat: c });
+      evs.push({ t: round4(t + 0.05), type: "key_up", cat: c });
+      t += 0.25;
+    }
+    t += 0.4 + Math.random() * 1.8;
+  }
+
+  // Mouse wander (smooth random walk)
+  let mx = 960, my = 540;
+  let vx = 0, vy = 0;
+  for (let mt = 0; mt < durationSec; mt += 1 / 30) {
+    vx += (Math.random() - 0.5) * 40;
+    vy += (Math.random() - 0.5) * 40;
+    vx *= 0.88; vy *= 0.88;
+    mx = Math.max(0, Math.min(1920, mx + vx));
+    my = Math.max(0, Math.min(1080, my + vy));
+    evs.push({ t: round4(mt), type: "mouse_move", x: Math.round(mx), y: Math.round(my) });
+  }
+
+  // Random clicks
+  for (let i = 0; i < 5; i++) {
+    const ct = Math.random() * durationSec;
+    evs.push({ t: round4(ct), type: "mouse_click", x: mx, y: my, button: "left", pressed: true });
+  }
+
+  evs.push({ t: round4(durationSec), type: "session_end" });
+  evs.sort((a, b) => a.t - b.t);
+  return evs;
+}
+
+// ---------- Wire up ----------
+$("fileInput").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  ingest(parseJsonl(text));
+  setStatus("已加载: " + f.name);
+});
+$("demoBtn").addEventListener("click", () => {
+  ingest(generateDemo(25));
+  setStatus("已生成 25s 测试数据");
+});
+$("playBtn").addEventListener("click", play);
+$("stopBtn").addEventListener("click", () => { stop(); setStatus("已停止"); });
+$("speed").addEventListener("input", (e) => {
+  speed = parseInt(e.target.value, 10);
+  $("speedLabel").textContent = speed + "×";
+});
+
+fitCanvas();
+</script>
+</body>
+</html>

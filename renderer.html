@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>乐团指挥 · 回看 v3</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0a0f; color: #d0d0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; }
+  header { padding: 12px 16px; background: #14141c; border-bottom: 1px solid #2a2a3a; }
+  h1 { margin: 0 0 10px 0; font-size: 16px; font-weight: 500; letter-spacing: 0.5px; }
+  h1 .v { font-size: 11px; color: #5fc0ff; margin-left: 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+  button, input[type=file]::file-selector-button, select, input[type=number] {
+    background: #2a2a3a; color: #d0d0e0; border: 1px solid #3a3a4a;
+    padding: 6px 12px; border-radius: 4px; font-size: 13px; font-family: inherit;
+  }
+  button { cursor: pointer; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #3a3a4a; }
+  button.primary { background: #1e4a7a; border-color: #2e6fb8; }
+  button.primary:hover:not(:disabled) { background: #2e6fb8; }
+  input[type=file] { color: #8080a0; font-size: 12px; }
+  input[type=number] { width: 70px; padding: 4px 6px; }
+  select { padding: 6px 10px; min-width: 200px; }
+  label { color: #a0a0b8; }
+  #progressContainer { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  #progressBar { flex: 1; height: 8px; background: #2a2a3a; border-radius: 4px; cursor: pointer; position: relative; overflow: hidden; }
+  #progressBar.disabled { cursor: not-allowed; opacity: 0.4; }
+  #progressFill { height: 100%; background: linear-gradient(90deg, #5fc0ff, #b58eff); width: 0%; transition: width 0.05s linear; }
+  #timeDisplay { color: #a0a0b8; font-family: ui-monospace, monospace; font-size: 12px; min-width: 120px; text-align: right; }
+  main { padding: 16px; }
+  canvas.visual { display: block; width: 100%; background: #14141c; border: 1px solid #2a2a3a; border-radius: 6px; }
+  #waveform { height: 108px; margin-bottom: 10px; }
+  #keysTimeline { height: 72px; margin-bottom: 10px; }
+  #trail { height: 42vh; }
+  #info { margin-top: 12px; font-size: 12px; color: #8080a0; line-height: 1.8; }
+  .chip { display: inline-block; padding: 2px 8px; background: #2a2a3a; border-radius: 3px; margin-right: 6px; color: #d0d0e0; }
+  .status { color: #5fc0ff; margin-left: 4px; }
+  .hint { color: #707088; font-size: 11px; margin-left: 4px; }
+
+  /* Recording panel */
+  #recPanel { padding: 14px 16px; background: #11111a; border-bottom: 1px solid #2a2a3a; }
+  #recPanel h2 { margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase; }
+  .rec-row { display: flex; align-items: center; gap: 12px; }
+  .light { width: 10px; height: 10px; border-radius: 50%; background: #555; flex-shrink: 0; }
+  .light.recording { background: #4ade80; box-shadow: 0 0 8px #4ade80; animation: pulse 1.6s ease-in-out infinite; }
+  .light.paused { background: #facc15; box-shadow: 0 0 6px #facc15; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  #recStatus { font-family: ui-monospace, monospace; color: #d0d0e0; font-size: 13px; min-width: 280px; }
+  .grow { flex: 1; }
+  button.danger { background: #6a1f1f; border-color: #a02525; }
+  button.danger:hover:not(:disabled) { background: #a02525; }
+
+  /* Modal */
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .modal.hidden { display: none; }
+  .modal-card { background: #14141c; border: 1px solid #2a2a3a; border-radius: 8px; padding: 24px; min-width: 380px; }
+  .modal-card h3 { margin: 0 0 14px 0; font-size: 15px; font-weight: 500; }
+  .modal-card .desc { color: #a0a0b8; font-size: 12px; margin: 0 0 14px 0; line-height: 1.6; }
+  .modal-card input[type=text] {
+    width: 100%; padding: 8px 10px; background: #0a0a0f; color: #d0d0e0;
+    border: 1px solid #3a3a4a; border-radius: 4px; font-size: 14px; font-family: inherit;
+    margin-bottom: 14px;
+  }
+  .modal-card .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  section.playback h2 { margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<section id="recPanel">
+  <h2>录制</h2>
+  <div class="rec-row">
+    <span class="light" id="recLight"></span>
+    <span id="recStatus">未录制</span>
+    <span class="grow"></span>
+    <button id="recStart" class="primary">● 开始</button>
+    <button id="recPause" disabled>❚❚ 暂停</button>
+    <button id="recStop" class="danger" disabled>■ 停止</button>
+    <button id="recBackground" disabled>后台运行</button>
+  </div>
+</section>
+
+<header>
+  <h2 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 500; color: #a0a0b8; letter-spacing: 0.8px; text-transform: uppercase;">回看</h2>
+  <div class="row">
+    <input type="file" id="fileInput" accept=".jsonl,.json">
+    <select id="sessionSelect" style="display:none"></select>
+    <button id="demoBtn">生成测试数据</button>
+  </div>
+  <div class="row">
+    <label>目标时长 <input type="number" id="targetDur" value="180" min="10" step="10"> 秒</label>
+    <button id="renderBtn" disabled>生成 WAV 缓冲</button>
+    <button id="playBtn" disabled>▶ 播放</button>
+    <button id="pauseBtn" disabled>❚❚ 暂停</button>
+    <button id="stopBtn" disabled>■ 停止</button>
+    <button id="downloadBtn" disabled>↓ 下载 WAV</button>
+    <span id="status" class="status"></span>
+  </div>
+  <div id="progressContainer">
+    <div id="progressBar" class="disabled"><div id="progressFill"></div></div>
+    <span id="timeDisplay">00:00 / 00:00</span>
+  </div>
+</header>
+
+<div id="stopModal" class="modal hidden">
+  <div class="modal-card">
+    <h3>保存录制</h3>
+    <p class="desc">给这段录制取个名字方便以后回看；留空则用时间戳保存。</p>
+    <input type="text" id="stopName" placeholder="例如：周二上午写代码" autocomplete="off">
+    <div class="actions">
+      <button id="stopCancel">取消</button>
+      <button id="stopSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+<main>
+  <canvas id="waveform" class="visual"></canvas>
+  <canvas id="keysTimeline" class="visual"></canvas>
+  <canvas id="trail" class="visual"></canvas>
+  <div id="info">加载 .jsonl 或点"生成测试数据"，再点"播放"。</div>
+</main>
+<script async src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+<script>
+// ---------- Seeded RNG ----------
+function hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  return function() {
+    let t = (seed += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- Music palette ----------
+const DIATONIC = {
+  ionian:     [0, 2, 4, 5, 7, 9, 11],
+  dorian:     [0, 2, 3, 5, 7, 9, 10],
+  lydian:     [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  aeolian:    [0, 2, 3, 5, 7, 8, 10],
+};
+const MODE_NAMES = Object.keys(DIATONIC);
+const PROGRESSIONS = {
+  ionian:     [0, 4, 5, 3],
+  lydian:     [0, 1, 4, 3],
+  mixolydian: [0, 6, 3, 0],
+  dorian:     [0, 6, 3, 0],
+  aeolian:    [0, 5, 2, 6],
+};
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+function buildPalette(sessionId) {
+  const rng = mulberry32(hashStr(sessionId || "default"));
+  const modeName = MODE_NAMES[Math.floor(rng() * MODE_NAMES.length)];
+  const rootOffset = Math.floor(rng() * 12);
+  const bpm = 65 + Math.floor(rng() * 36);
+  return {
+    sessionId, modeName, scale: DIATONIC[modeName],
+    rootMidi: 48 + rootOffset, rootName: NOTE_NAMES[rootOffset],
+    bpm, progression: PROGRESSIONS[modeName],
+  };
+}
+
+function scaleNoteAt(palette, degIdx, octaveOffset) {
+  const scaleLen = palette.scale.length;
+  const norm = ((degIdx % scaleLen) + scaleLen) % scaleLen;
+  const wrap = Math.floor(degIdx / scaleLen);
+  return palette.rootMidi + palette.scale[norm] + 12 * (octaveOffset + wrap);
+}
+function triadAt(palette, degIdx, octaveOffset) {
+  return [0, 2, 4].map(off => scaleNoteAt(palette, degIdx + off, octaveOffset));
+}
+function midiToNote(m) {
+  const o = Math.floor(m / 12) - 1;
+  return NOTE_NAMES[((m % 12) + 12) % 12] + o;
+}
+function midiToFreq(m) {
+  return 440 * Math.pow(2, (m - 69) / 12);
+}
+
+function makeMusicalTime(palette, speed) {
+  const secPerBeat = 60 / palette.bpm;
+  const secPerSixteenth = secPerBeat / 4;
+  const secPerBar = secPerBeat * 4;
+  return {
+    secPerBeat, secPerSixteenth, secPerBar,
+    toPlayback: (tSrc) => tSrc / speed,
+    quantize: (tPb) => Math.ceil(tPb / secPerSixteenth) * secPerSixteenth,
+    barAt: (tPb) => Math.floor(tPb / secPerBar),
+  };
+}
+
+function makeMelodyGen(palette) {
+  let walkStep = 0;
+  let lastMidi = palette.rootMidi + 12;
+  return function nextNote(cat, currentChordDeg) {
+    let deg, oct, dur;
+    switch (cat) {
+      case "letter": {
+        const walk = [0, 4, 2, 4, 0, 2, 4, 6];
+        deg = currentChordDeg + walk[walkStep % walk.length];
+        walkStep++;
+        oct = 1; dur = "16n"; break;
+      }
+      case "number":    deg = currentChordDeg + 6; oct = 1; dur = "16n"; break;
+      case "enter":     deg = currentChordDeg;     oct = 2; dur = "2n";  break;
+      case "backspace": return { midi: lastMidi, dur: "16n" };
+      case "space":     deg = currentChordDeg + 2; oct = 0; dur = "8n";  break;
+      case "modifier":  deg = currentChordDeg;     oct = 0; dur = "8n";  break;
+      case "symbol":    deg = currentChordDeg + 4; oct = 2; dur = "16n"; break;
+      case "tab":       deg = currentChordDeg + 2; oct = 2; dur = "8n";  break;
+      case "arrow":     deg = currentChordDeg + 2; oct = 1; dur = "16n"; break;
+      case "fn":        deg = currentChordDeg + 5; oct = 1; dur = "8n";  break;
+      default:           deg = currentChordDeg + 1; oct = 1; dur = "16n"; break;
+    }
+    lastMidi = scaleNoteAt(palette, deg, oct);
+    return { midi: lastMidi, dur };
+  };
+}
+
+// ---------- State ----------
+let events = [], noteEvents = [], mouseEvents = [], mouseMod = [], clickEvents = [];
+let sessionId = "", palette = null, totalDuration = 0, bounds = null;
+let targetDuration = 180;
+let renderedBuffer = null;  // Tone.ToneAudioBuffer
+let renderedAudioBuffer = null;
+let keyboardCueEvents = [];
+let waveformPeaks = [];
+let waveformPeakWidth = 0;
+let liveGraphNodes = [];
+let liveEndEvent = null;
+let nativeCtx = null;
+let nativeNodes = [];
+let nativeTimers = [];
+let playerSource = null;
+let playerStartCtxTime = 0;
+let playerStartOffset = 0;
+let isPlaying = false;
+let pauseOffset = 0;
+let trailFrame = null;
+
+function buildMouseMod(arr) {
+  if (arr.length < 2) return [];
+  const step = 0.2;
+  const out = [];
+  let nextT = arr[0].t;
+  let prev = arr[0];
+  for (const m of arr) {
+    if (m.t < nextT) continue;
+    const dt = Math.max(0.01, m.t - prev.t);
+    const dx = m.x - prev.x, dy = m.y - prev.y;
+    const sp = Math.min(1, Math.sqrt(dx*dx + dy*dy) / dt / 2000);
+    const fall = Math.min(1, Math.max(0, dy / dt / 1600));
+    const rise = Math.min(1, Math.max(0, -dy / dt / 1600));
+    const sweep = Math.min(1, Math.abs(dx) / dt / 1800);
+    out.push({ t: m.t, x: m.x, y: m.y, sp, fall, rise, sweep });
+    prev = m;
+    nextT += step;
+  }
+  return out;
+}
+
+function parseJsonl(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line)); } catch (e) {}
+  }
+  return out;
+}
+
+function ingest(rawEvents) {
+  resetPlayback();
+  renderedBuffer = null;
+  renderedAudioBuffer = null;
+  keyboardCueEvents = [];
+  waveformPeaks = [];
+  events = rawEvents.slice().sort((a, b) => a.t - b.t);
+  noteEvents  = events.filter(e => e.type === "key_down" && e.cat);
+  mouseEvents = events.filter(e => e.type === "mouse_move" && typeof e.x === "number");
+  clickEvents = events.filter(e => e.type === "mouse_click" && e.pressed);
+  const session = events.find(e => e.type === "session_start");
+  sessionId = (session && session.session_id) || "anon-" + Date.now();
+  totalDuration = events.length ? events[events.length - 1].t : 0;
+
+  if (mouseEvents.length) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const m of mouseEvents) {
+      if (m.x < minX) minX = m.x; if (m.x > maxX) maxX = m.x;
+      if (m.y < minY) minY = m.y; if (m.y > maxY) maxY = m.y;
+    }
+    if (maxX === minX) maxX++;
+    if (maxY === minY) maxY++;
+    bounds = { minX, minY, maxX, maxY };
+  } else {
+    bounds = null;
+  }
+
+  mouseMod = buildMouseMod(mouseEvents);
+  palette = buildPalette(sessionId);
+  refreshPlaybackPlan();
+  updateInfo();
+  updateButtons();
+  drawTimeDisplay();
+}
+
+function normX(x) { return bounds ? (x - bounds.minX) / (bounds.maxX - bounds.minX) : 0.5; }
+function normY(y) { return bounds ? (y - bounds.minY) / (bounds.maxY - bounds.minY) : 0.5; }
+
+// ---------- UI ----------
+const $ = (id) => document.getElementById(id);
+const canvas = $("trail");
+const waveCanvas = $("waveform");
+const keysCanvas = $("keysTimeline");
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const c of [waveCanvas, keysCanvas, canvas]) {
+    c.width = c.clientWidth * dpr;
+    c.height = c.clientHeight * dpr;
+    c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  waveformPeaks = [];
+  drawTimeDisplay();
+}
+window.addEventListener("resize", fitCanvas);
+
+function updateInfo() {
+  if (!palette) return;
+  const src = totalDuration.toFixed(1);
+  $("info").innerHTML = `
+    <span class="chip">session: ${sessionId}</span>
+    <span class="chip">${palette.rootName} ${palette.modeName}</span>
+    <span class="chip">BPM ${palette.bpm}</span>
+    <span class="chip">源 ${src}s</span>
+    <span class="chip">${noteEvents.length} 音符</span>
+    <span class="chip">${mouseEvents.length} 鼠标点</span>
+  `;
+}
+function setStatus(s) { $("status").textContent = s; }
+
+function updateButtons() {
+  const hasData = events.length > 1 && totalDuration > 0;
+  const hasBuf = !!renderedBuffer;
+  $("renderBtn").disabled = !hasData;
+  $("playBtn").disabled = (!hasData) || isPlaying;
+  $("pauseBtn").disabled = !isPlaying;
+  $("stopBtn").disabled = !hasData;
+  $("downloadBtn").disabled = !hasBuf;
+  $("progressBar").classList.toggle("disabled", !hasData);
+}
+
+function buildKeyboardCueEvents(mt, totalPb) {
+  const out = [];
+  const melGen = makeMelodyGen(palette);
+  const slotTaken = new Set();
+  for (const ev of noteEvents) {
+    const tPb = mt.toPlayback(ev.t);
+    if (tPb > totalPb) break;
+    const tQ = mt.quantize(tPb);
+    if (tQ > totalPb) continue;
+    const slot = Math.round(tQ / mt.secPerSixteenth);
+    if (slotTaken.has(slot)) continue;
+    slotTaken.add(slot);
+    const bar = mt.barAt(tQ);
+    const chordDeg = palette.progression[bar % palette.progression.length];
+    const n = melGen(ev.cat, chordDeg);
+    if (!n) continue;
+    out.push({ t: tQ, cat: ev.cat, midi: n.midi });
+  }
+  return out;
+}
+
+// ---------- Schedule graph + events ----------
+function scheduleEverything(palette, mt, totalPb, transport) {
+  transport.stop();
+  transport.cancel(0);
+  transport.position = 0;
+
+  const piano = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "square" },
+    envelope: { attack: 0.006, decay: 0.12, sustain: 0.18, release: 0.45 },
+    volume: -1,
+  });
+  const keyboardEcho = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 0.16, sustain: 0.12, release: 0.35 },
+    volume: -10,
+  });
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 1.8, decay: 0.6, sustain: 0.6, release: 3.0 },
+    volume: -24,
+  });
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "square" },
+    envelope: { attack: 0.02, decay: 0.4, sustain: 0.3, release: 0.5 },
+    filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.4, release: 0.5, baseFrequency: 180, octaves: 2.5 },
+    volume: -10,
+  });
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.04, octaves: 5,
+    envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.4 },
+    volume: -10,
+  });
+  const snare = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.08 },
+    volume: -18,
+  });
+  const hat = new Tone.MetalSynth({
+    frequency: 280, envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
+    harmonicity: 5.1, modulationIndex: 30, resonance: 4500, octaves: 1.2,
+    volume: -32,
+  });
+  const strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.25, decay: 0.3, sustain: 0.55, release: 1.2 },
+    volume: -20,
+  });
+  const brass = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.04, decay: 0.18, sustain: 0.35, release: 0.55 },
+    volume: -24,
+  });
+  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.28 });
+  const melodyBus = new Tone.Gain(1.05);
+  const masterFilter = new Tone.Filter(4000, "lowpass");
+  masterFilter.Q.value = 0.7;
+  const masterGain = new Tone.Gain(0.78);
+  const masterPanner = new Tone.Panner(0);
+  masterPanner.connect(masterGain);
+  masterGain.connect(masterFilter);
+  masterFilter.connect(reverb);
+  reverb.toDestination();
+  melodyBus.toDestination();
+  piano.connect(melodyBus);
+  keyboardEcho.connect(melodyBus);
+  for (const inst of [pad, bass, kick, snare, hat, strings, brass]) inst.connect(masterPanner);
+
+  transport.bpm.value = palette.bpm;
+
+  const numBars = Math.ceil(totalPb / mt.secPerBar) + 1;
+  for (let b = 0; b < numBars; b++) {
+    const chordDeg = palette.progression[b % palette.progression.length];
+    const triad = triadAt(palette, chordDeg, 0).map(midiToNote);
+    const tBar = b * mt.secPerBar;
+    transport.scheduleOnce((time) => {
+      pad.triggerAttackRelease(triad, mt.secPerBar * 0.95, time, 0.5);
+    }, tBar);
+
+    const rootName = midiToNote(scaleNoteAt(palette, chordDeg, -2));
+    transport.scheduleOnce((time) => {
+      bass.triggerAttackRelease(rootName, "4n", time, 0.75);
+    }, tBar);
+    transport.scheduleOnce((time) => {
+      bass.triggerAttackRelease(rootName, "4n", time, 0.55);
+    }, tBar + mt.secPerBeat * 2);
+  }
+
+  const kickSeq = new Tone.Sequence((time, hit) => {
+    if (hit) kick.triggerAttackRelease("C1", "16n", time, 0.55);
+  }, [1,0,0,0, 0,0,0,0, 1,0,0,1, 0,0,0,0], "16n").start(0);
+  const snareSeq = new Tone.Sequence((time, hit) => {
+    if (hit) snare.triggerAttackRelease("16n", time, 0.4);
+  }, [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], "16n").start(0);
+  const hatSeq = new Tone.Sequence((time, hit) => {
+    if (hit) hat.triggerAttackRelease("32n", time, 0.25);
+  }, [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1], "16n").start(0);
+
+  const melGen = makeMelodyGen(palette);
+  const slotTaken = new Set();
+  for (const ev of noteEvents) {
+    const tPb = mt.toPlayback(ev.t);
+    if (tPb > totalPb) break;
+    const tQ = mt.quantize(tPb);
+    if (tQ > totalPb) continue;
+    const slot = Math.round(tQ / mt.secPerSixteenth);
+    if (slotTaken.has(slot)) continue;
+    slotTaken.add(slot);
+    const bar = mt.barAt(tQ);
+    const chordDeg = palette.progression[bar % palette.progression.length];
+    const n = melGen(ev.cat, chordDeg);
+    if (!n) continue;
+    const note = midiToNote(n.midi);
+    const octaveNote = midiToNote(n.midi + 12);
+    const vel = ev.cat === "space" ? 0.48 : ev.cat === "backspace" ? 0.52 : ev.cat === "enter" ? 0.7 : 0.82;
+    transport.scheduleOnce((time) => {
+      piano.triggerAttackRelease(note, n.dur, time, vel);
+      if (ev.cat === "letter" || ev.cat === "number" || ev.cat === "symbol") {
+        keyboardEcho.triggerAttackRelease(octaveNote, "32n", time + mt.secPerSixteenth * 0.45, 0.22);
+      }
+    }, tQ);
+  }
+
+  if (bounds && mouseMod.length) {
+    const gestureSlots = new Set();
+    for (const m of mouseMod) {
+      const tPb = mt.toPlayback(m.t);
+      if (tPb > totalPb) break;
+      const yN = normY(m.y), xN = normX(m.x);
+      const batonHeight = 1 - yN;
+      const conductorEnergy = Math.min(1, 0.22 + m.sp * 0.65 + batonHeight * 0.28 + m.sweep * 0.22);
+      const cutoff = 500 + conductorEnergy * 6200;
+      const pan = Math.max(-1, Math.min(1, (xN - 0.5) * 1.6));
+      const wet = Math.min(0.7, 0.16 + (1 - conductorEnergy) * 0.25 + m.sweep * 0.18);
+      const gain = 0.45 + conductorEnergy * 0.55;
+      transport.scheduleOnce((time) => {
+        masterFilter.frequency.cancelScheduledValues(time);
+        masterFilter.frequency.linearRampToValueAtTime(cutoff, time + 0.1);
+        masterPanner.pan.cancelScheduledValues(time);
+        masterPanner.pan.linearRampToValueAtTime(pan, time + 0.1);
+        masterGain.gain.cancelScheduledValues(time);
+        masterGain.gain.linearRampToValueAtTime(gain, time + 0.12);
+        reverb.wet.cancelScheduledValues(time);
+        reverb.wet.linearRampToValueAtTime(wet, time + 0.1);
+      }, tPb);
+
+      const slot = Math.round(tPb / mt.secPerBeat);
+      if (!gestureSlots.has(slot) && (m.fall > 0.42 || m.rise > 0.5 || m.sweep > 0.72)) {
+        gestureSlots.add(slot);
+        const tQ = mt.quantize(tPb);
+        const bar = mt.barAt(tQ);
+        const chordDeg = palette.progression[bar % palette.progression.length];
+        const midChord = triadAt(palette, chordDeg, 1).map(midiToNote);
+        if (m.fall > 0.42) {
+          transport.scheduleOnce((time) => {
+            brass.triggerAttackRelease(midChord, "8n", time, 0.2 + m.fall * 0.45);
+            kick.triggerAttackRelease("C1", "16n", time, 0.35 + m.fall * 0.35);
+          }, tQ);
+        } else if (m.rise > 0.5) {
+          transport.scheduleOnce((time) => {
+            strings.triggerAttackRelease(midChord, "4n", time, 0.18 + m.rise * 0.28);
+          }, tQ);
+        } else {
+          transport.scheduleOnce((time) => {
+            strings.triggerAttackRelease(midChord, "8n", time, 0.16 + m.sweep * 0.22);
+          }, tQ);
+        }
+      }
+    }
+  }
+
+  for (const ev of clickEvents) {
+    const tPb = mt.toPlayback(ev.t);
+    if (tPb > totalPb) break;
+    const tQ = mt.quantize(tPb);
+    transport.scheduleOnce((time) => {
+      if (ev.button === "right") snare.triggerAttackRelease("16n", time, 0.7);
+      else kick.triggerAttackRelease("C1", "8n", time, 0.85);
+    }, tQ);
+  }
+
+  return [
+    piano, keyboardEcho, pad, bass, kick, snare, hat, strings, brass,
+    reverb, melodyBus, masterFilter, masterGain, masterPanner,
+    kickSeq, snareSeq, hatSeq,
+  ];
+}
+
+// ---------- Render (offline) ----------
+async function renderOffline() {
+  if (events.length <= 1 || totalDuration <= 0) {
+    setStatus("先加载一段录制");
+    return;
+  }
+  if (typeof Tone === "undefined") {
+    setStatus("音乐库未加载；联网后重试，或之后改成离线版。");
+    return;
+  }
+  resetPlayback();
+  renderedBuffer = null;
+  renderedAudioBuffer = null;
+  keyboardCueEvents = [];
+  waveformPeaks = [];
+  updateButtons();
+  setStatus("正在生成 WAV 缓冲…");
+
+  targetDuration = Math.max(10, parseInt($("targetDur").value, 10) || 180);
+  const speed = totalDuration > 0 ? totalDuration / targetDuration : 1;
+  const renderLen = targetDuration + 2;
+  const mt = makeMusicalTime(palette, speed);
+  keyboardCueEvents = buildKeyboardCueEvents(mt, targetDuration);
+
+  try {
+    const buf = await Tone.Offline(async () => {
+      scheduleEverything(palette, mt, targetDuration, Tone.Transport);
+      Tone.Transport.start();
+    }, renderLen);
+    renderedBuffer = buf;
+    renderedAudioBuffer = getRenderedAudioBuffer();
+    setStatus(`WAV 缓冲已生成 ${formatTime(buf.duration)} · 源 ${formatTime(totalDuration)} → ${(speed).toFixed(1)}×`);
+    updateButtons();
+    drawTimeDisplay();
+  } catch (e) {
+    setStatus("渲染失败: " + e.message);
+    console.error(e);
+  }
+}
+
+// ---------- Playback (real-time web mode) ----------
+function refreshPlaybackPlan() {
+  if (!palette || totalDuration <= 0) return null;
+  targetDuration = Math.max(10, parseInt($("targetDur").value, 10) || 180);
+  const speed = totalDuration > 0 ? totalDuration / targetDuration : 1;
+  const mt = makeMusicalTime(palette, speed);
+  keyboardCueEvents = buildKeyboardCueEvents(mt, targetDuration);
+  waveformPeaks = [];
+  return { speed, mt };
+}
+
+function disposeLiveGraph() {
+  if (typeof Tone !== "undefined" && liveEndEvent !== null) {
+    try { Tone.Transport.clear(liveEndEvent); } catch (e) {}
+  }
+  liveEndEvent = null;
+  for (const node of liveGraphNodes) {
+    try { if (node && node.dispose) node.dispose(); } catch (e) {}
+  }
+  liveGraphNodes = [];
+}
+
+function getPlaybackDuration() {
+  const audioBuffer = getRenderedAudioBuffer();
+  return audioBuffer ? audioBuffer.duration : targetDuration;
+}
+
+function getNativeContext() {
+  if (!nativeCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error("这个浏览器不支持 Web Audio");
+    nativeCtx = new Ctx();
+  }
+  return nativeCtx;
+}
+
+function trackNative(node) {
+  nativeNodes.push(node);
+  return node;
+}
+
+function stopNativeGraph() {
+  for (const timer of nativeTimers) clearTimeout(timer);
+  nativeTimers = [];
+  for (const node of nativeNodes) {
+    try { if (node.stop) node.stop(); } catch (e) {}
+    try { if (node.disconnect) node.disconnect(); } catch (e) {}
+  }
+  nativeNodes = [];
+}
+
+function scheduleOsc(ctx, dest, midi, when, dur, type, level, attack = 0.01, release = 0.06) {
+  const osc = trackNative(ctx.createOscillator());
+  const gain = trackNative(ctx.createGain());
+  osc.type = type;
+  osc.frequency.setValueAtTime(midiToFreq(midi), when);
+  gain.gain.setValueAtTime(0.0001, when);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.001, level), when + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + Math.max(attack + release, dur));
+  osc.connect(gain);
+  gain.connect(dest);
+  osc.start(when);
+  osc.stop(when + dur + release + 0.05);
+}
+
+function scheduleNoise(ctx, dest, when, dur, level, filterType = "bandpass", freq = 1800) {
+  const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * dur)), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = trackNative(ctx.createBufferSource());
+  const filter = trackNative(ctx.createBiquadFilter());
+  const gain = trackNative(ctx.createGain());
+  src.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(freq, when);
+  gain.gain.setValueAtTime(level, when);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(dest);
+  src.start(when);
+  src.stop(when + dur + 0.02);
+}
+
+function scheduleKick(ctx, dest, when, level) {
+  const osc = trackNative(ctx.createOscillator());
+  const gain = trackNative(ctx.createGain());
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(110, when);
+  osc.frequency.exponentialRampToValueAtTime(45, when + 0.18);
+  gain.gain.setValueAtTime(Math.max(0.001, level), when);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.28);
+  osc.connect(gain);
+  gain.connect(dest);
+  osc.start(when);
+  osc.stop(when + 0.32);
+}
+
+function playNativeAudio() {
+  if (events.length <= 1 || totalDuration <= 0) {
+    setStatus("先加载数据或点生成测试数据");
+    return;
+  }
+  try {
+    const ctx = getNativeContext();
+    const plan = refreshPlaybackPlan();
+    if (!plan) throw new Error("无法准备播放时间线");
+    const offset = Math.max(0, Math.min(pauseOffset, targetDuration - 0.05));
+    stopNativeGraph();
+
+    const startAt = ctx.currentTime + 0.06;
+    const masterGain = trackNative(ctx.createGain());
+    const masterFilter = trackNative(ctx.createBiquadFilter());
+    const melodyGain = trackNative(ctx.createGain());
+    const panner = ctx.createStereoPanner ? trackNative(ctx.createStereoPanner()) : null;
+    masterGain.gain.setValueAtTime(0.62, startAt);
+    masterFilter.type = "lowpass";
+    masterFilter.frequency.setValueAtTime(3800, startAt);
+    masterGain.connect(masterFilter);
+    if (panner) {
+      masterFilter.connect(panner);
+      panner.connect(ctx.destination);
+    } else {
+      masterFilter.connect(ctx.destination);
+    }
+    melodyGain.gain.setValueAtTime(1.0, startAt);
+    melodyGain.connect(ctx.destination);
+
+    const scheduleAt = (tPb) => startAt + (tPb - offset);
+    const melGen = makeMelodyGen(palette);
+    const slotTaken = new Set();
+    for (const ev of noteEvents) {
+      const tPbRaw = plan.mt.toPlayback(ev.t);
+      if (tPbRaw > targetDuration) break;
+      const tQ = plan.mt.quantize(tPbRaw);
+      if (tQ < offset || tQ > targetDuration) continue;
+      const slot = Math.round(tQ / plan.mt.secPerSixteenth);
+      if (slotTaken.has(slot)) continue;
+      slotTaken.add(slot);
+      const bar = plan.mt.barAt(tQ);
+      const chordDeg = palette.progression[bar % palette.progression.length];
+      const n = melGen(ev.cat, chordDeg);
+      if (!n) continue;
+      const when = scheduleAt(tQ);
+      const dur = ev.cat === "enter" ? 0.8 : ev.cat === "space" ? 0.24 : 0.16;
+      const level = ev.cat === "space" ? 0.18 : ev.cat === "backspace" ? 0.2 : 0.34;
+      scheduleOsc(ctx, melodyGain, n.midi, when, dur, "square", level, 0.006, 0.09);
+      if (ev.cat === "letter" || ev.cat === "number" || ev.cat === "symbol") {
+        scheduleOsc(ctx, melodyGain, n.midi + 12, when + plan.mt.secPerSixteenth * 0.45, 0.08, "triangle", 0.08, 0.005, 0.04);
+      }
+    }
+
+    for (let b = 0; b * plan.mt.secPerBar < targetDuration; b++) {
+      const tBar = b * plan.mt.secPerBar;
+      if (tBar + plan.mt.secPerBar < offset) continue;
+      const chordDeg = palette.progression[b % palette.progression.length];
+      const triad = triadAt(palette, chordDeg, 0);
+      for (const midi of triad) {
+        scheduleOsc(ctx, masterGain, midi, scheduleAt(Math.max(tBar, offset)), Math.min(plan.mt.secPerBar * 0.9, targetDuration - tBar), "sawtooth", 0.035, 0.6, 0.7);
+      }
+      const root = scaleNoteAt(palette, chordDeg, -2);
+      if (tBar >= offset) scheduleOsc(ctx, masterGain, root, scheduleAt(tBar), 0.25, "square", 0.11, 0.01, 0.12);
+      const tBass2 = tBar + plan.mt.secPerBeat * 2;
+      if (tBass2 >= offset && tBass2 <= targetDuration) scheduleOsc(ctx, masterGain, root, scheduleAt(tBass2), 0.22, "square", 0.09, 0.01, 0.1);
+    }
+
+    for (let t = Math.floor(offset / plan.mt.secPerBeat) * plan.mt.secPerBeat; t <= targetDuration; t += plan.mt.secPerBeat) {
+      if (t < offset) continue;
+      const beat = Math.round(t / plan.mt.secPerBeat) % 4;
+      if (beat === 0 || beat === 2) scheduleKick(ctx, masterGain, scheduleAt(t), beat === 0 ? 0.18 : 0.12);
+      if (beat === 1 || beat === 3) scheduleNoise(ctx, masterGain, scheduleAt(t), 0.08, 0.055, "bandpass", 1800);
+      scheduleNoise(ctx, masterGain, scheduleAt(t + plan.mt.secPerBeat * 0.5), 0.035, 0.025, "highpass", 5200);
+    }
+
+    const gestureSlots = new Set();
+    for (const m of mouseMod) {
+      const tPb = plan.mt.toPlayback(m.t);
+      if (tPb < offset || tPb > targetDuration) continue;
+      const when = scheduleAt(tPb);
+      const yN = normY(m.y), xN = normX(m.x);
+      const batonHeight = 1 - yN;
+      const conductorEnergy = Math.min(1, 0.22 + m.sp * 0.65 + batonHeight * 0.28 + m.sweep * 0.22);
+      masterFilter.frequency.setTargetAtTime(500 + conductorEnergy * 6200, when, 0.08);
+      masterGain.gain.setTargetAtTime(0.35 + conductorEnergy * 0.45, when, 0.08);
+      if (panner) panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, (xN - 0.5) * 1.6)), when, 0.08);
+
+      const slot = Math.round(tPb / plan.mt.secPerBeat);
+      if (!gestureSlots.has(slot) && (m.fall > 0.42 || m.rise > 0.5 || m.sweep > 0.72)) {
+        gestureSlots.add(slot);
+        const bar = plan.mt.barAt(tPb);
+        const chordDeg = palette.progression[bar % palette.progression.length];
+        const chord = triadAt(palette, chordDeg, 1);
+        const level = m.fall > 0.42 ? 0.11 : 0.065;
+        for (const midi of chord) scheduleOsc(ctx, masterGain, midi, when, 0.25, m.fall > 0.42 ? "sawtooth" : "triangle", level, 0.02, 0.12);
+        if (m.fall > 0.42) scheduleKick(ctx, masterGain, when, 0.14);
+      }
+    }
+
+    const endMs = Math.max(20, (targetDuration - offset) * 1000 + 120);
+    nativeTimers.push(setTimeout(() => {
+      isPlaying = false;
+      pauseOffset = 0;
+      stopNativeGraph();
+      updateButtons();
+      drawTimeDisplay();
+      setStatus("播放结束");
+    }, endMs));
+
+    playerStartCtxTime = ctx.currentTime;
+    playerStartOffset = offset;
+    isPlaying = true;
+    updateButtons();
+    setStatus("Web Audio 实时播放中");
+    startProgressLoop();
+  } catch (e) {
+    isPlaying = false;
+    stopNativeGraph();
+    updateButtons();
+    setStatus("播放失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+async function play() {
+  return playNativeAudio();
+
+  if (events.length <= 1 || totalDuration <= 0) {
+    setStatus("先加载数据或点生成测试数据");
+    return;
+  }
+  if (typeof Tone === "undefined") {
+    setStatus("音乐库未加载；联网后重试。");
+    return;
+  }
+  try {
+    await Tone.start();
+    const ctx = getPlaybackContext();
+    if (!ctx) throw new Error("无法启动音频上下文");
+    if (playerSource) { try { playerSource.stop(); } catch (e) {} playerSource.disconnect(); }
+    playerSource = null;
+    disposeLiveGraph();
+    Tone.Transport.stop();
+    Tone.Transport.cancel(0);
+
+    const plan = refreshPlaybackPlan();
+    if (!plan) throw new Error("无法准备播放时间线");
+    const offset = Math.max(0, Math.min(pauseOffset, targetDuration - 0.05));
+    liveGraphNodes = scheduleEverything(palette, plan.mt, targetDuration, Tone.Transport) || [];
+    liveEndEvent = Tone.Transport.scheduleOnce(() => {
+      isPlaying = false;
+      pauseOffset = 0;
+      try { Tone.Transport.stop(); Tone.Transport.cancel(0); } catch (e) {}
+      disposeLiveGraph();
+      updateButtons();
+      drawTimeDisplay();
+      setStatus("播放结束");
+    }, targetDuration);
+    Tone.Transport.start("+0.03", offset);
+    playerStartCtxTime = ctx.currentTime;
+    playerStartOffset = offset;
+    isPlaying = true;
+    updateButtons();
+    setStatus("实时播放中");
+    startProgressLoop();
+  } catch (e) {
+    isPlaying = false;
+    disposeLiveGraph();
+    updateButtons();
+    setStatus("播放失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+function pause() {
+  if (!isPlaying) return;
+  pauseOffset = getCurrentTime();
+  if (playerSource) {
+    try { playerSource.stop(); } catch (e) {}
+    try { playerSource.disconnect(); } catch (e) {}
+    playerSource = null;
+  }
+  stopNativeGraph();
+  try { Tone.Transport.stop(); Tone.Transport.cancel(0); } catch (e) {}
+  disposeLiveGraph();
+  isPlaying = false;
+  updateButtons();
+  setStatus("已暂停");
+}
+
+function stop() {
+  if (playerSource) {
+    try { playerSource.stop(); } catch (e) {}
+    try { playerSource.disconnect(); } catch (e) {}
+    playerSource = null;
+  }
+  if (typeof Tone !== "undefined") {
+    try { Tone.Transport.stop(); Tone.Transport.cancel(0); } catch (e) {}
+  }
+  stopNativeGraph();
+  disposeLiveGraph();
+  isPlaying = false;
+  pauseOffset = 0;
+  updateButtons();
+  setStatus("已停止");
+  drawTimeDisplay();
+}
+
+function resetPlayback() {
+  if (playerSource) {
+    try { playerSource.stop(); } catch (e) {}
+    try { playerSource.disconnect(); } catch (e) {}
+    playerSource = null;
+  }
+  if (typeof Tone !== "undefined") {
+    try { Tone.Transport.stop(); Tone.Transport.cancel(0); } catch (e) {}
+  }
+  stopNativeGraph();
+  disposeLiveGraph();
+  isPlaying = false;
+  pauseOffset = 0;
+  if (trailFrame) { cancelAnimationFrame(trailFrame); trailFrame = null; }
+  for (const c of [waveCanvas, keysCanvas, canvas]) {
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.clientWidth, c.clientHeight);
+  }
+}
+
+function seek(targetT) {
+  if (events.length <= 1 || totalDuration <= 0) return;
+  refreshPlaybackPlan();
+  const duration = getPlaybackDuration();
+  const wasPlaying = isPlaying;
+  if (playerSource) {
+    try { playerSource.stop(); } catch (e) {}
+    try { playerSource.disconnect(); } catch (e) {}
+    playerSource = null;
+  }
+  if (typeof Tone !== "undefined") {
+    try { Tone.Transport.stop(); Tone.Transport.cancel(0); } catch (e) {}
+  }
+  stopNativeGraph();
+  disposeLiveGraph();
+  isPlaying = false;
+  pauseOffset = Math.max(0, Math.min(duration - 0.05, targetT));
+  if (wasPlaying) play();
+  else { updateButtons(); drawTimeDisplay(); }
+}
+
+function getCurrentTime() {
+  if (events.length <= 1 || totalDuration <= 0) return 0;
+  const duration = getPlaybackDuration();
+  if (isPlaying) {
+    const ctx = getPlaybackContext();
+    return Math.min(duration,
+      playerStartOffset + ((ctx ? ctx.currentTime : 0) - playerStartCtxTime));
+  }
+  return pauseOffset;
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function getRenderedAudioBuffer() {
+  if (renderedAudioBuffer) return renderedAudioBuffer;
+  if (!renderedBuffer) return null;
+  const isNative = (buf) => (
+    buf
+    && typeof AudioBuffer !== "undefined"
+    && buf instanceof AudioBuffer
+  );
+  const candidates = [
+    renderedBuffer,
+    renderedBuffer._buffer,
+    renderedBuffer.buffer,
+    typeof renderedBuffer.get === "function" ? renderedBuffer.get() : null,
+  ];
+  for (const buf of candidates) {
+    if (isNative(buf)) {
+      renderedAudioBuffer = buf;
+      return renderedAudioBuffer;
+    }
+  }
+
+  const source = candidates.find((buf) => (
+    buf
+    && typeof buf.getChannelData === "function"
+    && typeof buf.numberOfChannels === "number"
+    && typeof buf.length === "number"
+    && typeof buf.sampleRate === "number"
+  ));
+  const ctx = getPlaybackContext();
+  if (!source || !ctx || !ctx.createBuffer) return null;
+  const copy = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let c = 0; c < source.numberOfChannels; c++) {
+    copy.copyToChannel(source.getChannelData(c), c);
+  }
+  renderedAudioBuffer = copy;
+  return renderedAudioBuffer;
+}
+
+function getPlaybackContext() {
+  if (nativeCtx) return nativeCtx;
+  const ctx = (Tone.getContext && Tone.getContext()) || Tone.context;
+  return (ctx && (ctx.rawContext || ctx._context)) || ctx;
+}
+
+function buildWaveformPeaks(buffer, width) {
+  if (!buffer || width <= 0) return [];
+  const buckets = Math.max(80, Math.floor(width));
+  const data = buffer.getChannelData(0);
+  const block = Math.max(1, Math.floor(data.length / buckets));
+  const peaks = [];
+  for (let i = 0; i < buckets; i++) {
+    let sum = 0;
+    const start = i * block;
+    const end = Math.min(data.length, start + block);
+    for (let j = start; j < end; j++) sum += Math.abs(data[j]);
+    peaks.push(Math.min(1, (sum / Math.max(1, end - start)) * 4.5));
+  }
+  return peaks;
+}
+
+function buildActivityPeaks(width) {
+  const buckets = Math.max(80, Math.floor(width));
+  const peaks = new Array(buckets).fill(0.03);
+  const duration = Math.max(1, targetDuration || 1);
+  for (const cue of keyboardCueEvents) {
+    const idx = Math.max(0, Math.min(buckets - 1, Math.floor((cue.t / duration) * buckets)));
+    peaks[idx] = Math.min(1, peaks[idx] + 0.72);
+    if (idx > 0) peaks[idx - 1] = Math.min(1, peaks[idx - 1] + 0.24);
+    if (idx + 1 < buckets) peaks[idx + 1] = Math.min(1, peaks[idx + 1] + 0.24);
+  }
+  const speed = totalDuration > 0 ? totalDuration / duration : 1;
+  for (const m of mouseMod) {
+    const tPb = m.t / speed;
+    if (tPb < 0 || tPb > duration) continue;
+    const idx = Math.max(0, Math.min(buckets - 1, Math.floor((tPb / duration) * buckets)));
+    peaks[idx] = Math.min(1, peaks[idx] + 0.12 + m.sp * 0.35);
+  }
+  return peaks;
+}
+
+function cueColor(cat) {
+  if (cat === "space") return "#facc15";
+  if (cat === "backspace") return "#fb7185";
+  if (cat === "enter") return "#c084fc";
+  if (cat === "number") return "#38bdf8";
+  if (cat === "symbol") return "#fb923c";
+  return "#4ade80";
+}
+
+function drawWaveform(currentTime) {
+  const ctx = waveCanvas.getContext("2d");
+  const W = waveCanvas.clientWidth, H = waveCanvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#14141c";
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(208, 208, 224, 0.12)";
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2);
+  ctx.lineTo(W, H / 2);
+  ctx.stroke();
+
+  const audioBuffer = getRenderedAudioBuffer();
+  if (!waveformPeaks.length || waveformPeakWidth !== Math.floor(W)) {
+    waveformPeakWidth = Math.floor(W);
+    waveformPeaks = audioBuffer ? buildWaveformPeaks(audioBuffer, W) : buildActivityPeaks(W);
+  }
+  const duration = audioBuffer ? audioBuffer.duration : getPlaybackDuration();
+  const playX = duration > 0 ? (currentTime / duration) * W : 0;
+  const barW = W / waveformPeaks.length;
+  for (let i = 0; i < waveformPeaks.length; i++) {
+    const x = i * barW;
+    const amp = Math.max(1, waveformPeaks[i] * (H * 0.42));
+    ctx.fillStyle = x <= playX ? "rgba(95, 192, 255, 0.85)" : "rgba(160, 160, 184, 0.32)";
+    ctx.fillRect(x, H / 2 - amp, Math.max(1, barW * 0.7), amp * 2);
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(Math.max(0, Math.min(W - 2, playX)), 8, 2, H - 16);
+}
+
+function drawKeyboardTimeline(currentTime) {
+  const ctx = keysCanvas.getContext("2d");
+  const W = keysCanvas.clientWidth, H = keysCanvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#14141c";
+  ctx.fillRect(0, 0, W, H);
+  const audioBuffer = getRenderedAudioBuffer();
+  const duration = audioBuffer ? audioBuffer.duration : targetDuration;
+  if (!duration || duration <= 0) return;
+
+  ctx.strokeStyle = "rgba(208, 208, 224, 0.08)";
+  for (let i = 1; i < 4; i++) {
+    const y = (H / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+
+  for (const cue of keyboardCueEvents) {
+    const x = (cue.t / duration) * W;
+    const lane = Math.abs(cue.midi || 0) % 4;
+    const y = 12 + lane * ((H - 24) / 3);
+    const until = cue.t - currentTime;
+    const hit = Math.abs(until) < 0.13;
+    const upcoming = until >= 0 && until <= 2.0;
+    const alpha = hit ? 1 : upcoming ? 0.85 - until * 0.18 : cue.t < currentTime ? 0.28 : 0.48;
+    const radius = hit ? 8 : upcoming ? 5.5 : 3.5;
+    ctx.fillStyle = cueColor(cue.cat);
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    if (upcoming || hit) {
+      ctx.globalAlpha = Math.max(0.18, alpha * 0.35);
+      ctx.fillRect(x - 1, 4, 2, H - 8);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const playX = (currentTime / duration) * W;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(Math.max(0, Math.min(W - 2, playX)), 4, 2, H - 8);
+}
+
+function drawMusicVisuals() {
+  const t = getCurrentTime();
+  drawWaveform(t);
+  drawKeyboardTimeline(t);
+}
+
+function drawTimeDisplay() {
+  const t = getCurrentTime();
+  const audioBuffer = getRenderedAudioBuffer();
+  const total = audioBuffer ? audioBuffer.duration : (renderedBuffer ? renderedBuffer.duration : 0);
+  const pct = total > 0 ? Math.min(1, t / total) : 0;
+  $("progressFill").style.width = (pct * 100) + "%";
+  $("timeDisplay").textContent = formatTime(t) + " / " + formatTime(total);
+  drawMusicVisuals();
+}
+
+function startProgressLoop() {
+  if (trailFrame) cancelAnimationFrame(trailFrame);
+  const tick = () => {
+    drawTimeDisplay();
+    drawTrail();
+    if (isPlaying) trailFrame = requestAnimationFrame(tick);
+    else trailFrame = null;
+  };
+  trailFrame = requestAnimationFrame(tick);
+}
+
+// ---------- Trail viz ----------
+let mouseIdxCache = 0;
+function drawTrail() {
+  if (!bounds || mouseEvents.length === 0) return;
+  const tPb = getCurrentTime();
+  const speed = totalDuration / targetDuration;
+  const tSrc = tPb * speed;
+  const trailLen = 4.0;
+  if (mouseIdxCache > 0 && mouseEvents[mouseIdxCache - 1] && mouseEvents[mouseIdxCache - 1].t > tSrc) {
+    mouseIdxCache = 0;
+  }
+  while (mouseIdxCache < mouseEvents.length && mouseEvents[mouseIdxCache].t <= tSrc) mouseIdxCache++;
+  const endIdx = mouseIdxCache;
+  let startIdx = endIdx;
+  while (startIdx > 0 && mouseEvents[startIdx - 1].t > tSrc - trailLen) startIdx--;
+
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  if (endIdx - startIdx >= 2) {
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (let i = startIdx + 1; i < endIdx; i++) {
+      const prev = mouseEvents[i - 1], curr = mouseEvents[i];
+      const age = tSrc - curr.t;
+      const alpha = Math.max(0, 1 - age / trailLen);
+      ctx.strokeStyle = `rgba(95, 192, 255, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 1.5 + alpha * 3;
+      ctx.beginPath();
+      ctx.moveTo(normX(prev.x) * W, normY(prev.y) * H);
+      ctx.lineTo(normX(curr.x) * W, normY(curr.y) * H);
+      ctx.stroke();
+    }
+    const head = mouseEvents[endIdx - 1];
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(normX(head.x) * W, normY(head.y) * H, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ---------- WAV encode + download ----------
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const numSamples = buffer.length;
+  const bytesPerSample = 2;
+  const dataSize = numSamples * numChannels * bytesPerSample;
+  const fileSize = 44 + dataSize;
+  const ab = new ArrayBuffer(fileSize);
+  const view = new DataView(ab);
+  const wstr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  wstr(0, "RIFF");
+  view.setUint32(4, fileSize - 8, true);
+  wstr(8, "WAVE"); wstr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  wstr(36, "data");
+  view.setUint32(40, dataSize, true);
+  const channels = [];
+  for (let c = 0; c < numChannels; c++) channels.push(buffer.getChannelData(c));
+  let off = 44;
+  for (let i = 0; i < numSamples; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      const s = Math.max(-1, Math.min(1, channels[c][i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+  }
+  return new Blob([ab], { type: "audio/wav" });
+}
+
+function downloadWav() {
+  if (!renderedBuffer) return;
+  const audioBuffer = getRenderedAudioBuffer();
+  if (!audioBuffer) {
+    setStatus("下载失败: 无法读取渲染后的音频缓冲");
+    return;
+  }
+  const blob = audioBufferToWav(audioBuffer);
+  const filename = `乐团指挥_${sessionId}_${targetDuration}s.wav`;
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.save_wav) {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const b64 = reader.result.split(",")[1];
+      const saved = await window.pywebview.api.save_wav(filename, b64);
+      setStatus("已保存到: " + saved);
+    };
+    reader.readAsDataURL(blob);
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("已下载: " + filename);
+  }
+}
+
+// ---------- Demo data ----------
+function round4(n) { return Math.round(n * 10000) / 10000; }
+function generateDemo(durationSec) {
+  durationSec = durationSec || 45;
+  const sid = "demo-" + Math.floor(Math.random() * 100000).toString(36);
+  const evs = [{ t: 0, type: "session_start", session_id: sid }];
+  let t = 0.4;
+  const cats = ["letter","letter","letter","letter","letter","letter","space","letter","number","letter"];
+  while (t < durationSec) {
+    const burstEnd = Math.min(durationSec, t + 1 + Math.random() * 4);
+    while (t < burstEnd) {
+      const c = cats[Math.floor(Math.random() * cats.length)];
+      evs.push({ t: round4(t), type: "key_down", cat: c });
+      evs.push({ t: round4(t + 0.04), type: "key_up", cat: c });
+      t += 0.07 + Math.random() * 0.18;
+    }
+    if (Math.random() < 0.6 && t < durationSec) {
+      const c = Math.random() < 0.5 ? "enter" : "backspace";
+      evs.push({ t: round4(t), type: "key_down", cat: c });
+      evs.push({ t: round4(t + 0.05), type: "key_up", cat: c });
+      t += 0.3;
+    }
+    t += 0.5 + Math.random() * 2.5;
+  }
+  let mx = 960, my = 540, vx = 0, vy = 0;
+  for (let mt2 = 0; mt2 < durationSec; mt2 += 1/30) {
+    vx += (Math.random() - 0.5) * 40;
+    vy += (Math.random() - 0.5) * 40;
+    vx *= 0.88; vy *= 0.88;
+    mx = Math.max(0, Math.min(1920, mx + vx));
+    my = Math.max(0, Math.min(1080, my + vy));
+    evs.push({ t: round4(mt2), type: "mouse_move", x: Math.round(mx), y: Math.round(my) });
+  }
+  for (let i = 0; i < 8; i++) {
+    const ct = Math.random() * durationSec;
+    evs.push({ t: round4(ct), type: "mouse_click", x: mx, y: my,
+               button: Math.random() < 0.2 ? "right" : "left", pressed: true });
+  }
+  evs.push({ t: round4(durationSec), type: "session_end" });
+  evs.sort((a, b) => a.t - b.t);
+  return evs;
+}
+
+// ---------- pywebview session-list integration ----------
+let sessionListBound = false;
+async function refreshSessionList() {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.list_sessions) return;
+  const list = await window.pywebview.api.list_sessions();
+  const sel = $("sessionSelect");
+  sel.innerHTML = '<option value="">— 选择 session —</option>';
+  for (const s of (list || [])) {
+    const opt = document.createElement("option");
+    opt.value = s.path;
+    const date = new Date(s.mtime * 1000).toLocaleString();
+    const sz = s.size < 1024 ? `${s.size}B` : `${(s.size/1024).toFixed(0)}KB`;
+    opt.textContent = `${s.name} · ${sz} · ${date}`;
+    sel.appendChild(opt);
+  }
+  sel.style.display = "";
+  $("fileInput").style.display = "none";
+  if (!sessionListBound) {
+    sel.addEventListener("change", async () => {
+      if (!sel.value) return;
+      const text = await window.pywebview.api.read_session(sel.value);
+      ingest(parseJsonl(text));
+      setStatus("已加载: " + sel.options[sel.selectedIndex].textContent.split(" · ")[0]);
+    });
+    sessionListBound = true;
+  }
+}
+
+// ---------- Recording controls (pywebview only) ----------
+let recordingState = "idle"; // mirror of backend state
+let pollHandle = null;
+
+function fmtElapsed(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function fmtSize(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b/1024).toFixed(1)} KB`;
+  return `${(b/1024/1024).toFixed(2)} MB`;
+}
+
+function applyRecState(s) {
+  recordingState = s.state || "idle";
+  const light = $("recLight");
+  const status = $("recStatus");
+  const startBtn = $("recStart");
+  const pauseBtn = $("recPause");
+  const stopBtn = $("recStop");
+  const bgBtn = $("recBackground");
+
+  light.classList.remove("recording", "paused");
+  if (recordingState === "recording") {
+    light.classList.add("recording");
+    status.textContent = `录制中 ${fmtElapsed(s.elapsed)} · ${fmtSize(s.size)}`;
+    startBtn.disabled = true; pauseBtn.disabled = false; stopBtn.disabled = false; bgBtn.disabled = false;
+    pauseBtn.textContent = "❚❚ 暂停";
+  } else if (recordingState === "paused") {
+    light.classList.add("paused");
+    status.textContent = `已暂停 ${fmtElapsed(s.elapsed)} · ${fmtSize(s.size)}`;
+    startBtn.disabled = true; pauseBtn.disabled = false; stopBtn.disabled = false; bgBtn.disabled = false;
+    pauseBtn.textContent = "▶ 继续";
+  } else {
+    status.textContent = "未录制";
+    startBtn.disabled = false; pauseBtn.disabled = true; stopBtn.disabled = true; bgBtn.disabled = true;
+    pauseBtn.textContent = "❚❚ 暂停";
+  }
+}
+
+async function pollStatus() {
+  if (!window.pywebview || !window.pywebview.api) return;
+  try {
+    const s = await window.pywebview.api.get_recording_status();
+    applyRecState(s);
+  } catch (e) {}
+}
+
+async function onStartRecord() {
+  if (!window.pywebview) return;
+  const r = await window.pywebview.api.start_recording();
+  if (!r || !r.ok) return;
+  await pollStatus();
+  setStatus("记录已开始。需要后台时点“后台运行”。");
+}
+async function onPauseRecord() {
+  if (!window.pywebview) return;
+  await window.pywebview.api.pause_recording();
+  await pollStatus();
+}
+async function onBackgroundRecord() {
+  if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.minimize_window) return;
+  const ok = await window.pywebview.api.minimize_window();
+  if (!ok) setStatus("当前窗口环境不支持后台最小化");
+}
+function onStopRecord() {
+  $("stopName").value = "";
+  $("stopModal").classList.remove("hidden");
+  setTimeout(() => $("stopName").focus(), 50);
+}
+async function doStopWithName(name) {
+  $("stopModal").classList.add("hidden");
+  if (!window.pywebview) return;
+  const r = await window.pywebview.api.stop_recording(name || null);
+  if (r && r.ok) {
+    await pollStatus();
+    await refreshSessionList();
+    if (r.path) {
+      const text = await window.pywebview.api.read_session(r.path);
+      ingest(parseJsonl(text));
+      $("sessionSelect").value = r.path;
+      setStatus("已保存并加载: " + (r.name || ""));
+    } else {
+      setStatus("已保存: " + (r.name || ""));
+    }
+  }
+}
+
+window.addEventListener("pywebviewready", () => {
+  refreshSessionList();
+  pollStatus();
+  pollHandle = setInterval(pollStatus, 500);
+});
+
+// ---------- Wire up ----------
+$("fileInput").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  ingest(parseJsonl(text));
+  setStatus("已加载: " + f.name);
+});
+$("demoBtn").addEventListener("click", () => {
+  ingest(generateDemo(45));
+  setStatus("已生成 45s 测试数据（点播放）");
+});
+$("renderBtn").addEventListener("click", renderOffline);
+$("playBtn").addEventListener("click", play);
+$("pauseBtn").addEventListener("click", pause);
+$("stopBtn").addEventListener("click", stop);
+$("downloadBtn").addEventListener("click", downloadWav);
+$("recStart").addEventListener("click", onStartRecord);
+$("recPause").addEventListener("click", onPauseRecord);
+$("recStop").addEventListener("click", onStopRecord);
+$("recBackground").addEventListener("click", onBackgroundRecord);
+$("stopCancel").addEventListener("click", () => {
+  $("stopModal").classList.add("hidden");
+  setStatus("继续记录");
+});
+$("stopSave").addEventListener("click", () => doStopWithName($("stopName").value));
+$("stopName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") doStopWithName($("stopName").value);
+});
+$("progressBar").addEventListener("click", (e) => {
+  if (events.length <= 1 || totalDuration <= 0) return;
+  const rect = $("progressBar").getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  refreshPlaybackPlan();
+  seek(pct * getPlaybackDuration());
+});
+
+fitCanvas();
+updateButtons();
+</script>
+</body>
+</html>
